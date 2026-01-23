@@ -1,25 +1,30 @@
-
+/* Base card */
 .card-skinner {
-  position: relative;
-  overflow: hidden;
-}
+  position: relative !important;
+  overflow: hidden !important;
 
-.card-skinner {
+  /* Remove Stripe background pattern */
   background-image: none !important;
+  background-color: transparent !important;
 }
 
-.card-skinner::before {
+/* Glass skin */
+.card-skinner::after {
   content: "";
   position: absolute;
   inset: 0;
   background: rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(14px);
   border-radius: 16px;
-  z-index: 0;
+  z-index: 1;
+  pointer-events: none;
 }
 
-.card-skinner .stripe-card_number,
-.card-skinner .stripe-card_name {
+/* Force text above skin */
+.card-skinner .stripe-card__number,
+.card-skinner .stripe-card__name,
+.card-skinner span,
+.card-skinner p {
   position: relative;
   z-index: 3;
   color: #ffffff !important;
