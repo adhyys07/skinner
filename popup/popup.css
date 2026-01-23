@@ -1,0 +1,49 @@
+:root { color-scheme: light dark; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+body { margin: 0; padding: 12px; min-width: 240px; background: #0f1115; color: #e9ecf2; position: relative; }
+    h1 { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
+    .grid { display: grid; gap: 8px; }
+    button {
+      width: 100%; padding: 10px; border: 1px solid #2a2f3a; border-radius: 10px;
+      background: #171b23; color: inherit; cursor: pointer; font-weight: 600;
+      transition: border 0.15s, transform 0.1s;
+    }
+    button:hover { border-color: #5865f2; }
+    button:active { transform: translateY(1px); }
+    .ghost { background: transparent; border-style: dashed; }
+    .row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #9aa3b5; }
+.header{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.logo{
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    margin-top:10px;
+}
+
+.upload-btn {
+    width: auto;
+    padding: 10px;
+    border:1px solid #2a2f3a;
+    border-radius: 10px;
+    background: #171b23;
+    color: inherit;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 13px;
+    transition: border 0.15s, transform 0.1s;
+    text-align: center;
+    display: block;
+}
+.upload-btn:hover {
+    border-color: #5865f2;
+}
+
+.upload-btn:active {
+    transform: translateY(1px);
+}

@@ -1,0 +1,18 @@
+/* Custom image theme - no overlays */
+.card-skinner {
+  position: relative !important;
+  overflow: hidden !important;
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
+/* Force text above custom image */
+.card-skinner .stripe-card__number,
+.card-skinner .stripe-card__name,
+.card-skinner span,
+.card-skinner p {
+  position: relative;
+  z-index: 10;
+  color: #ffffff !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}

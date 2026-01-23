@@ -1,12 +1,23 @@
 <!DOCTYPE html>
 <head>
+    <meta charset="UTF-8">
+    <title>Card Skinner</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
     <h3>Card Theme</h3>
-    <button data-theme="glass">Glass</button>
-    <button data-theme="neon">Neon</button>
-    <button data-theme="off">Turn Off Overlays</button>
+    <img src="/assets/hcb-dark.png" alt="hcb" class="logo">
+    <div class="grid">
+    <button data-theme="glassBtn">Glass</button>
+    <button data-theme="neonBtn">Neon</button>
+    <button data-theme="offBtn" class="ghost">Turn Off Overlays</button>
+    <label for="imageUpload" class="upload-btn">
+       📷 Upload Custom Image
+        <input type="file" id="imageUpload" accept="image/*" style="display: none;" /> 
+    </div>
+    <div class="row" style="margin-top:10px ;">
+        <span>Status</span><span id="status">Idle</span>
+    </div>
     <script src="popup.js"></script>
 </body>
 </html>

@@ -15,52 +15,86 @@
     link.href = chrome.runtime.getURL(`themes/${theme}.css`);
   }
 
+  let currentTheme = "glass";
+
+  function applyTextColor(card) {
+    if (currentTheme !== "glass") return;
+
+    const htmlElement = document.documentElement;
+    const isDarkValue = htmlElement.getAttribute('data-dark');
+    const textColor = isDarkValue === 'false' ? '#000000' : '#ffffff';
+
+    console.log('[Card Skinner DEBUG] data-dark:', isDarkValue, 'text color:', textColor);
+
+    card.querySelectorAll('.stripe-card__number, .stripe-card__name, span, p').forEach(el => {
+      el.style.setProperty('color', textColor, 'important');
+    });
+  }
+
+  function applyCustomImage() {
+    try {
+      // Use chrome.storage.local for image storage (larger quota)
+      if (chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(['customImage'], (data) => {
+          if (data.customImage && currentTheme === 'custom') {
+            console.log('[Card Skinner] Applying custom image');
+            const cards = document.querySelectorAll('.card-skinner');
+            cards.forEach(card => {
+              // Apply image directly with !important to override theme CSS
+              card.style.setProperty('background-image', `url('${data.customImage}')`, 'important');
+              card.style.setProperty('background-size', 'cover', 'important');
+              card.style.setProperty('background-position', 'center', 'important');
+              card.style.setProperty('background-repeat', 'no-repeat', 'important');
+            });
+          }
+        });
+      }
+    } catch (err) {
+      console.log('[Card Skinner] Could not load custom image:', err);
+    }
+  }
+
   function skinCards() {
     document.querySelectorAll(CARD_SELECTOR).forEach(card => {
       if (!card.classList.contains("card-skinner")) {
         card.classList.add("card-skinner");
       }
-      
-      // Debug: Check HTML element attributes
-      const htmlElement = document.documentElement;
-      const isDarkValue = htmlElement.getAttribute('data-dark');
-      console.log('[Card Skinner DEBUG] HTML data-dark attribute:', isDarkValue);
-      console.log('[Card Skinner DEBUG] HTML element:', htmlElement);
-      console.log('[Card Skinner DEBUG] All HTML attributes:', Array.from(htmlElement.attributes).map(a => `${a.name}="${a.value}"`));
-      
-      // Auto-adjust text color based on data-dark attribute (only for glass theme)
-      chrome.storage.sync.get(["theme"], data => {
-        console.log('[Card Skinner DEBUG] Current theme from storage:', data.theme);
-        
-        if (data.theme === "glass" || !data.theme) {
-          const textColor = isDarkValue === 'false' ? '#000000' : '#ffffff';
-          
-          console.log('[Card Skinner] Glass theme active - data-dark:', isDarkValue, 'text color:', textColor);
-          
-          // Apply text color directly to all text elements
-          card.querySelectorAll('.stripe-card__number, .stripe-card__name, span, p').forEach(el => {
-            el.style.setProperty('color', textColor, 'important');
-            console.log('[Card Skinner DEBUG] Applied color to element:', el, 'color:', textColor);
-          });
-        } else {
-          console.log('[Card Skinner] Non-glass theme, skipping text color adjustment');
-        }
-      });
+      applyTextColor(card);
     });
   }
 
-  chrome.storage.sync.get(["theme"], data => {
-    applyTheme(data.theme || "glass");
-  });
+  function loadThemeAndSkin() {
+    try {
+      const canGet = chrome && chrome.storage && chrome.storage.sync && typeof chrome.storage.sync.get === 'function';
+      if (canGet) {
+        chrome.storage.sync.get(["theme"], data => {
+          currentTheme = data?.theme || "glass";
+          applyTheme(currentTheme);
+          skinCards();
+          applyCustomImage();
+        });
+        return;
+      }
+    } catch (e) {
+      console.warn('[Card Skinner] storage get failed, defaulting to glass', e);
+    }
+    currentTheme = "glass";
+    applyTheme(currentTheme);
+    skinCards();
+    applyCustomImage();
+  }
 
-  skinCards();
+  loadThemeAndSkin();
 
-  new MutationObserver(skinCards).observe(document.body, {
+  new MutationObserver(() => {
+    skinCards();
+    applyCustomImage();
+  }).observe(document.body, {
     childList: true,
     subtree: true
   });
   
-  // Watch for data-dark attribute changes
+  // Watch for data-dark attribute changes and re-apply text color
   new MutationObserver(() => {
     skinCards();
   }).observe(document.documentElement, {
