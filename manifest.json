@@ -1,0 +1,33 @@
+{
+    "manifest_version": 3,
+    "name": "HCB Skinner",
+    "description": "Visually customize card designs and some pre defined  card designs for HCB.",
+    "version": "1.0.0",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting"
+    ],
+    "host_permissions":[
+        "https://hcb.hackclub.com/*"
+    ],
+    "action":{
+        "default_popup": "popup/popup.html"
+        },
+        "content_scripts": [
+        {
+            "matches": ["https://hcb.hackclub.com/*"],
+            "js": ["content/injector.js"]
+        }
+      ],
+      "web_accessible_resources": [
+        {
+          "resources": [
+            "themes/*.css",
+            "assets/*"
+
+          ],
+          "matches": ["https://hcb.hackclub.com/*"]
+        }
+      ]
+    }

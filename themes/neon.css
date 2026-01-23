@@ -1,0 +1,19 @@
+.card-skinner{
+    background: linear-gradient(135deg,#00feba,#5b548a);
+    box-shadow: 0 0 20px #00feba,0 0 40px #5b548a;
+    border-radius: 16px;
+    color: black;
+}
+.card-skinner::before{
+    content: "";
+    position: absolute;
+    inset:0;
+    background: linear-gradient(135deg, #00feba, #5b548a);
+    border-radius: 16px ;
+    z-index: 0;
+}
+
+.card-skinner *{
+    position: relative;
+    z-index: 1;
+}
