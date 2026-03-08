@@ -4,6 +4,7 @@
   // Only theme the MAIN homepage card preview
   // Match both active and frozen states
   const CARD_SELECTOR = ".stripe-card.virtual.mt1";
+  const USER_NAME_SELECTOR = '[class~="text-left"][class~="flex-1"][class~="truncate"][class~="hidden"][class~="lg:block"]';
   const isMyCardsPage = () => /\/my\/cards\/?$/.test(location.pathname);
   const isOrgCardsPage = () => /^\/[^/]+\/cards\/?$/.test(location.pathname) && !isMyCardsPage();
 
@@ -16,7 +17,67 @@
   let lastObservedUrl = location.pathname + location.search + location.hash;
   let routeRecoveryTimer = null;
   let routeRecoveryAttempts = 0;
+  let cachedCurrentUserName = '';
+  let cachedCurrentUserAt = 0;
   const INIT_MIN_INTERVAL_MS = 120;
+
+  function normalizeText(value) {
+    return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  function getCurrentUserName() {
+    const now = Date.now();
+    if (cachedCurrentUserName && now - cachedCurrentUserAt < 2000) {
+      return cachedCurrentUserName;
+    }
+
+    const candidates = Array.from(document.querySelectorAll(USER_NAME_SELECTOR));
+    let chosen = '';
+
+    // Avoid card-tile owner labels when detecting the signed-in user name.
+    const nonCardCandidates = candidates.filter(el => {
+      const host = el.closest("[data-testid='card-preview'], a, li, article");
+      return !(host && host.querySelector(CARD_SELECTOR));
+    });
+
+    // Prefer profile areas (nav/header/aside) over any other labels.
+    const profileNode = nonCardCandidates.find(el => el.closest('nav, header, aside'));
+    if (profileNode) {
+      chosen = normalizeText(profileNode.textContent);
+    }
+
+    if (!chosen) {
+      const firstNonEmpty = nonCardCandidates.find(el => normalizeText(el.textContent));
+      chosen = firstNonEmpty ? normalizeText(firstNonEmpty.textContent) : '';
+    }
+
+    cachedCurrentUserName = chosen;
+    cachedCurrentUserAt = now;
+    return cachedCurrentUserName;
+  }
+
+  function cardBelongsToCurrentUser(card, currentUserName) {
+    if (!currentUserName) return false;
+
+    const cardBlock = card.closest("[data-testid='card-preview'], a, li, article") || card.parentElement;
+    if (!cardBlock) return false;
+
+    const ownerNodes = Array.from(cardBlock.querySelectorAll(USER_NAME_SELECTOR));
+    for (const node of ownerNodes) {
+      const candidate = normalizeText(node.textContent);
+      if (!candidate) continue;
+      const cleanedCandidate = candidate.replace(/[.\u2026]+$/g, '').trim();
+      const cleanedCurrent = currentUserName.replace(/[.\u2026]+$/g, '').trim();
+      const isExact = cleanedCandidate === cleanedCurrent;
+      const isPrefix = cleanedCandidate.length >= 4 && cleanedCurrent.length >= 4 &&
+        (cleanedCandidate.startsWith(cleanedCurrent) || cleanedCurrent.startsWith(cleanedCandidate));
+      if (isExact || isPrefix) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 
   function findMyCardsContainer() {
     const byTestId = document.querySelector("[data-testid='my-cards'], [data-testid='my-cards-section']");
@@ -61,15 +122,38 @@
     });
   }
 
+  function isExcludedCard(card) {
+    if (!card) return false;
+
+    const classBlob = [
+      card.className || '',
+      card.parentElement?.className || '',
+      card.closest('.stripe-card')?.className || ''
+    ].join(' ').toLowerCase();
+
+    const excludedByClass = /\b(canceled|cancelled|deactivated|canceled-right|cancelled-right)\b/.test(classBlob);
+    const statusText = (card.querySelector('.stripe-card__status')?.textContent || '').trim().toLowerCase();
+    const excludedByStatus = statusText.includes('canceled') || statusText.includes('cancelled') || statusText.includes('deactivated');
+
+    return excludedByClass || excludedByStatus;
+  }
+
   function shouldThemeCard(card, myCardsContainerOverride = undefined) {
     if (isMyCardsPage()) return true;
     if (!isOrgCardsPage()) return false;
 
+    const currentUserName = getCurrentUserName();
+    if (!currentUserName) return false;
+
     const myCardsContainer = myCardsContainerOverride !== undefined
       ? myCardsContainerOverride
       : getMyCardsContainer();
-    if (!myCardsContainer) return false;
-    return myCardsContainer.contains(card);
+
+    // If a dedicated "My cards" section exists, card must be in it.
+    if (myCardsContainer && !myCardsContainer.contains(card)) return false;
+
+    // Always verify card ownership by user name on org pages.
+    return cardBelongsToCurrentUser(card, currentUserName);
   }
 
   function applyTheme(theme) {
@@ -109,22 +193,13 @@
 
           const onOrgCards = isOrgCardsPage();
           const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
-          if (onOrgCards && !myCardsContainer) {
-            // Wait for section hydration instead of stripping themed cards too early.
-            return;
-          }
-
           const cards = document.querySelectorAll('.card-skinner');
           cards.forEach(card => {
             if (!shouldThemeCard(card, myCardsContainer)) {
               resetCardTheme(card);
               return;
             }
-            if (
-              card.classList.contains('canceled') ||
-              card.classList.contains('deactivated') ||
-              card.classList.contains('canceled-right')
-            ) {
+            if (isExcludedCard(card)) {
               resetCardTheme(card);
               return;
             }
@@ -189,21 +264,13 @@
   function skinCards() {
     const onOrgCards = isOrgCardsPage();
     const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
-    if (onOrgCards && !myCardsContainer) {
-      // Section not ready yet; skip this pass and let recovery retries handle it.
-      return;
-    }
 
     document.querySelectorAll(CARD_SELECTOR).forEach(card => {
       if (!shouldThemeCard(card, myCardsContainer)) {
         resetCardTheme(card);
         return;
       }
-      if (
-        card.classList.contains('canceled') ||
-        card.classList.contains('deactivated') ||
-        card.classList.contains('canceled-right')
-      ) {
+      if (isExcludedCard(card)) {
         resetCardTheme(card);
         return;
       }
