@@ -4,6 +4,73 @@
   // Only theme the MAIN homepage card preview
   // Match both active and frozen states
   const CARD_SELECTOR = ".stripe-card.virtual.mt1";
+  const isMyCardsPage = () => /\/my\/cards\/?$/.test(location.pathname);
+  const isOrgCardsPage = () => /^\/[^/]+\/cards\/?$/.test(location.pathname) && !isMyCardsPage();
+
+  let cachedMyCardsContainer = null;
+  let cachedMyCardsPath = '';
+  let cachedMyCardsAt = 0;
+  let cardClassObserver = null;
+  let scheduledInitTimer = null;
+  let lastInitAt = 0;
+  let lastObservedUrl = location.pathname + location.search + location.hash;
+  let routeRecoveryTimer = null;
+  let routeRecoveryAttempts = 0;
+  const INIT_MIN_INTERVAL_MS = 120;
+
+  function findMyCardsContainer() {
+    const byTestId = document.querySelector("[data-testid='my-cards'], [data-testid='my-cards-section']");
+    if (byTestId) return byTestId;
+
+    const heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,[role='heading']"))
+      .find(el => /my\s*cards/i.test((el.textContent || "").trim()));
+    return heading ? heading.closest("section, article, [role='region'], .card--section, div") : null;
+  }
+
+  function getMyCardsContainer() {
+    const now = Date.now();
+    const path = location.pathname || '';
+    const cacheValid =
+      cachedMyCardsContainer &&
+      cachedMyCardsPath === path &&
+      now - cachedMyCardsAt < 1500 &&
+      document.contains(cachedMyCardsContainer);
+
+    if (cacheValid) {
+      return cachedMyCardsContainer;
+    }
+
+    cachedMyCardsContainer = findMyCardsContainer();
+    cachedMyCardsPath = path;
+    cachedMyCardsAt = now;
+    return cachedMyCardsContainer;
+  }
+
+  function resetCardTheme(card) {
+    card.classList.remove('card-skinner');
+    card.style.removeProperty('background-image');
+    card.style.removeProperty('background-size');
+    card.style.removeProperty('background-position');
+    card.style.removeProperty('background-repeat');
+    card.style.removeProperty('background-color');
+    card.style.removeProperty('opacity');
+    card.style.removeProperty('filter');
+    card.style.removeProperty('border');
+    card.querySelectorAll('.stripe-card__number, .stripe-card__name, span, p').forEach(el => {
+      el.style.removeProperty('color');
+    });
+  }
+
+  function shouldThemeCard(card, myCardsContainerOverride = undefined) {
+    if (isMyCardsPage()) return true;
+    if (!isOrgCardsPage()) return false;
+
+    const myCardsContainer = myCardsContainerOverride !== undefined
+      ? myCardsContainerOverride
+      : getMyCardsContainer();
+    if (!myCardsContainer) return false;
+    return myCardsContainer.contains(card);
+  }
 
   function applyTheme(theme) {
     let link = document.getElementById("card-skinner-theme");
@@ -39,8 +106,28 @@
         chrome.storage.local.get(['customImage'], (data) => {
           const img = data.customImage;
           if (!img) return;
+
+          const onOrgCards = isOrgCardsPage();
+          const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
+          if (onOrgCards && !myCardsContainer) {
+            // Wait for section hydration instead of stripping themed cards too early.
+            return;
+          }
+
           const cards = document.querySelectorAll('.card-skinner');
           cards.forEach(card => {
+            if (!shouldThemeCard(card, myCardsContainer)) {
+              resetCardTheme(card);
+              return;
+            }
+            if (
+              card.classList.contains('canceled') ||
+              card.classList.contains('deactivated') ||
+              card.classList.contains('canceled-right')
+            ) {
+              resetCardTheme(card);
+              return;
+            }
             const isFrozen = card.classList.contains('frozen');
             const shouldApply = (currentTheme === 'custom' || isFrozen) && currentTheme !== 'off';
             if (!shouldApply) return;
@@ -60,9 +147,13 @@
 
   // Observe class changes on the main card to re-apply when HCB toggles frozen state
   function watchCardClass() {
+    if (cardClassObserver) {
+      cardClassObserver.disconnect();
+      cardClassObserver = null;
+    }
     const card = document.querySelector(CARD_SELECTOR);
     if (!card) return;
-    const obs = new MutationObserver(muts => {
+    cardClassObserver = new MutationObserver(muts => {
       for (const m of muts) {
         if (m.type === 'attributes' && m.attributeName === 'class') {
           // Re-apply styling and image when the site changes card classes
@@ -71,7 +162,7 @@
         }
       }
     });
-    obs.observe(card, { attributes: true, attributeFilter: ['class'] });
+    cardClassObserver.observe(card, { attributes: true, attributeFilter: ['class'] });
   }
 
   function hideOfficialFreezeUI() {
@@ -96,7 +187,26 @@
   }
 
   function skinCards() {
+    const onOrgCards = isOrgCardsPage();
+    const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
+    if (onOrgCards && !myCardsContainer) {
+      // Section not ready yet; skip this pass and let recovery retries handle it.
+      return;
+    }
+
     document.querySelectorAll(CARD_SELECTOR).forEach(card => {
+      if (!shouldThemeCard(card, myCardsContainer)) {
+        resetCardTheme(card);
+        return;
+      }
+      if (
+        card.classList.contains('canceled') ||
+        card.classList.contains('deactivated') ||
+        card.classList.contains('canceled-right')
+      ) {
+        resetCardTheme(card);
+        return;
+      }
       if (!card.classList.contains("card-skinner")) {
         card.classList.add("card-skinner");
       }
@@ -249,6 +359,7 @@
 
   // Robust initialization with multiple strategies
   function initializeExtension() {
+    lastInitAt = Date.now();
     loadThemeAndSkin();
     
     // Ensure panel is created
@@ -257,19 +368,66 @@
     }
   }
 
+  function scheduleInitialize(delay = 0) {
+    const now = Date.now();
+    const wait = Math.max(delay, INIT_MIN_INTERVAL_MS - (now - lastInitAt));
+    if (scheduledInitTimer) {
+      clearTimeout(scheduledInitTimer);
+    }
+    scheduledInitTimer = setTimeout(() => {
+      scheduledInitTimer = null;
+      initializeExtension();
+    }, Math.max(0, wait));
+  }
+
+  function scheduleInitializeBurst(delays = [0, 180, 650]) {
+    delays.forEach((delay) => {
+      setTimeout(() => {
+        scheduleInitialize(0);
+      }, delay);
+    });
+  }
+
+  function isAnyCardsPage() {
+    return isMyCardsPage() || isOrgCardsPage();
+  }
+
+  function startRouteRecovery() {
+    if (routeRecoveryTimer) {
+      clearInterval(routeRecoveryTimer);
+      routeRecoveryTimer = null;
+    }
+
+    routeRecoveryAttempts = 0;
+    routeRecoveryTimer = setInterval(() => {
+      routeRecoveryAttempts += 1;
+      cachedMyCardsContainer = null;
+      scheduleInitialize(0);
+
+      const relevantPage = isMyCardsPage() || isOrgCardsPage();
+      const anyCards = Boolean(document.querySelector(CARD_SELECTOR));
+      const themedCards = Boolean(document.querySelector(`${CARD_SELECTOR}.card-skinner`));
+      const done = !relevantPage || (anyCards && themedCards) || routeRecoveryAttempts >= 16;
+      if (done) {
+        clearInterval(routeRecoveryTimer);
+        routeRecoveryTimer = null;
+      }
+    }, 250);
+  }
+
   // IMMEDIATE execution - don't wait for anything
   initializeExtension();
 
   // Strategy 1: Immediate execution if DOM is ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeExtension);
+    document.addEventListener('DOMContentLoaded', () => scheduleInitialize());
   } else {
     // DOM already ready, execute immediately
-    initializeExtension();
+    scheduleInitialize();
   }
 
   // Strategy 2: Wait for full page load
-  window.addEventListener('load', initializeExtension);
+  window.addEventListener('load', () => scheduleInitializeBurst([0, 120, 500]));
 
   // Strategy 3: Aggressive retry with very fast interval
   let retryCount = 0;
@@ -279,7 +437,8 @@
     if (card || retryCount >= maxRetries) {
       clearInterval(retryInterval);
       if (card) {
-        initializeExtension();
+        scheduleInitializeBurst([0, 140]);
+        startRouteRecovery();
       }
     }
     retryCount++;
@@ -290,10 +449,18 @@
     skinCards();
     applyCustomImage();
     watchCardClass();
-  }, 50); // Reduced from 150ms to 50ms
+  }, 120);
 
   // More aggressive card detection - watch for new card elements specifically
   new MutationObserver((mutations) => {
+    const currentUrl = location.pathname + location.search + location.hash;
+    if (currentUrl !== lastObservedUrl) {
+      lastObservedUrl = currentUrl;
+      cachedMyCardsContainer = null;
+      scheduleInitializeBurst([0, 180, 700]);
+      startRouteRecovery();
+    }
+
     let cardAdded = false;
     for (const mutation of mutations) {
       if (mutation.addedNodes.length) {
@@ -313,10 +480,7 @@
     if (cardAdded) {
       // Card was just added, apply immediately
       console.log('[Card Skinner] Card detected in DOM, applying theme...');
-      initializeExtension();
-    } else {
-      // Regular update with debouncing
-      debouncedUpdate();
+      scheduleInitialize(0);
     }
   }).observe(document.body, {
     childList: true,
@@ -338,44 +502,65 @@
 
   history.pushState = function(...args) {
     originalPushState.apply(this, args);
-    initializeExtension(); // Immediate
-    setTimeout(initializeExtension, 50);
-    setTimeout(initializeExtension, 200);
+    cachedMyCardsContainer = null;
+    lastObservedUrl = location.pathname + location.search + location.hash;
+    scheduleInitializeBurst([20, 180, 700]);
+    startRouteRecovery();
   };
 
   history.replaceState = function(...args) {
     originalReplaceState.apply(this, args);
-    initializeExtension(); // Immediate
-    setTimeout(initializeExtension, 50);
-    setTimeout(initializeExtension, 200);
+    cachedMyCardsContainer = null;
+    lastObservedUrl = location.pathname + location.search + location.hash;
+    scheduleInitializeBurst([20, 180, 700]);
+    startRouteRecovery();
   };
 
   // Also listen for popstate (back/forward buttons)
   window.addEventListener('popstate', () => {
-    initializeExtension(); // Immediate
-    setTimeout(initializeExtension, 50);
-    setTimeout(initializeExtension, 200);
+    cachedMyCardsContainer = null;
+    lastObservedUrl = location.pathname + location.search + location.hash;
+    scheduleInitializeBurst([20, 180, 700]);
+    startRouteRecovery();
   });
 
   // Listen for hashchange as well
   window.addEventListener('hashchange', () => {
-    initializeExtension(); // Immediate
-    setTimeout(initializeExtension, 50);
+    lastObservedUrl = location.pathname + location.search + location.hash;
+    scheduleInitializeBurst([50, 220]);
+    startRouteRecovery();
+  });
+
+  // Handle back/forward cache restores where normal load/navigation hooks may not fire.
+  window.addEventListener('pageshow', () => {
+    cachedMyCardsContainer = null;
+    lastObservedUrl = location.pathname + location.search + location.hash;
+    scheduleInitializeBurst([0, 160, 550]);
+    startRouteRecovery();
+  });
+
+  // Focus can return after tab/app switch without strong DOM mutation signals.
+  window.addEventListener('focus', () => {
+    if (!isAnyCardsPage()) return;
+    scheduleInitialize(40);
   });
 
   // Strategy 6: Re-apply when tab becomes visible (in case card loaded while tab was hidden)
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
-      initializeExtension();
+      scheduleInitializeBurst([50, 300]);
+      startRouteRecovery();
     }
   });
 
-  // Strategy 7: Periodic check to ensure theme is applied (every 1 second)
+  // Lightweight self-heal: only touch cards pages and only when cards exist but none are themed.
   setInterval(() => {
-    const card = document.querySelector(CARD_SELECTOR);
-    if (card && !card.classList.contains('card-skinner')) {
-      console.log('[Card Skinner] Periodic check: card found without theme, applying...');
-      initializeExtension();
+    if (!isAnyCardsPage()) return;
+    const hasCard = Boolean(document.querySelector(CARD_SELECTOR));
+    if (!hasCard) return;
+    const hasThemedCard = Boolean(document.querySelector(`${CARD_SELECTOR}.card-skinner`));
+    if (!hasThemedCard) {
+      scheduleInitializeBurst([0, 220]);
     }
-  }, 1000); // Reduced from 2000ms to 1000ms
+  }, 1800);
 })();
