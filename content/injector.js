@@ -177,6 +177,10 @@
 
   function applyTheme(theme) {
     let link = document.getElementById("card-skinner-theme");
+    if (theme === 'off') {
+      if (link) link.remove();
+      return;
+    }
     if (!link) {
       link = document.createElement("link");
       link.id = "card-skinner-theme";
@@ -275,9 +279,9 @@
     if (isSkinning) return;
     isSkinning = true;
     try {
-      // When theme is off, reset all cards and bail
+      // When theme is off, only reset cards we previously themed
       if (currentTheme === 'off') {
-        document.querySelectorAll(CARD_SELECTOR).forEach(card => resetCardTheme(card));
+        document.querySelectorAll(`${CARD_SELECTOR}.card-skinner`).forEach(card => resetCardTheme(card));
         return;
       }
 
@@ -536,6 +540,7 @@
 
   // Lightweight self-heal: only touch cards pages and only when cards exist but none are themed.
   setInterval(() => {
+    if (currentTheme === 'off') return;
     if (!isAnyCardsPage()) return;
     const hasCard = Boolean(document.querySelector(CARD_SELECTOR));
     if (!hasCard) return;
