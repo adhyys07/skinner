@@ -105,4 +105,4 @@ This project is an unofficial visual customization extension and is not affiliat
 This extension is work in progress and this is just a very rough prototype so you may have bugs, errors and other issues. For the time being you cannot apply different themes to different cards. If you need a feature or want to report a bug then you can DM me on slack ~@Adhyys
 
 ## For Transparency
-I have used AI in this project
+I have used AI in this project for bug fixing and modifying some features.

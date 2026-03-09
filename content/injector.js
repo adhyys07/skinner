@@ -1,11 +1,10 @@
 (() => {
   console.log("[Card Skinner] Loaded in:", location.href);
 
-  // Only theme the MAIN homepage card preview
-  // Match both active and frozen states
   const CARD_SELECTOR = ".stripe-card.virtual.mt1";
   const USER_NAME_SELECTOR = '[class~="text-left"][class~="flex-1"][class~="truncate"][class~="hidden"][class~="lg:block"]';
   const isMyCardsPage = () => /\/my\/cards\/?$/.test(location.pathname);
+  const isStripeCardPage = () => /^\/stripe_cards\//.test(location.pathname);
   const isOrgCardsPage = () => /^\/[^/]+\/cards\/?$/.test(location.pathname) && !isMyCardsPage();
 
   let cachedMyCardsContainer = null;
@@ -19,7 +18,9 @@
   let routeRecoveryAttempts = 0;
   let cachedCurrentUserName = '';
   let cachedCurrentUserAt = 0;
+  const cardOwnershipCache = new WeakMap();
   const INIT_MIN_INTERVAL_MS = 120;
+  let isSkinning = false;
 
   function normalizeText(value) {
     return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -59,24 +60,40 @@
   function cardBelongsToCurrentUser(card, currentUserName) {
     if (!currentUserName) return false;
 
-    const cardBlock = card.closest("[data-testid='card-preview'], a, li, article") || card.parentElement;
-    if (!cardBlock) return false;
-
-    const ownerNodes = Array.from(cardBlock.querySelectorAll(USER_NAME_SELECTOR));
-    for (const node of ownerNodes) {
-      const candidate = normalizeText(node.textContent);
-      if (!candidate) continue;
-      const cleanedCandidate = candidate.replace(/[.\u2026]+$/g, '').trim();
-      const cleanedCurrent = currentUserName.replace(/[.\u2026]+$/g, '').trim();
-      const isExact = cleanedCandidate === cleanedCurrent;
-      const isPrefix = cleanedCandidate.length >= 4 && cleanedCurrent.length >= 4 &&
-        (cleanedCandidate.startsWith(cleanedCurrent) || cleanedCurrent.startsWith(cleanedCandidate));
-      if (isExact || isPrefix) {
-        return true;
-      }
+    const cacheEntry = cardOwnershipCache.get(card);
+    const routeKey = location.pathname;
+    if (
+      cacheEntry &&
+      cacheEntry.routeKey === routeKey &&
+      cacheEntry.userName === currentUserName &&
+      Date.now() - cacheEntry.at < 10000
+    ) {
+      return cacheEntry.result;
     }
 
-    return false;
+    // Walk up at most 6 levels to find the nearest ancestor with an owner label.
+    let ownerText = '';
+    let node = card.parentElement;
+    for (let i = 0; i < 6 && node && node !== document.body; i++) {
+      const nameEl = node.querySelector(USER_NAME_SELECTOR);
+      if (nameEl) {
+        ownerText = normalizeText(nameEl.textContent);
+        break;
+      }
+      node = node.parentElement;
+    }
+
+    let result = false;
+    if (ownerText) {
+      const cleanOwner = ownerText.replace(/[.\u2026]+$/g, '').trim();
+      const cleanCurrent = currentUserName.replace(/[.\u2026]+$/g, '').trim();
+      result = cleanOwner === cleanCurrent ||
+        (cleanOwner.length >= 5 && cleanCurrent.length >= 5 &&
+         (cleanOwner.startsWith(cleanCurrent) || cleanCurrent.startsWith(cleanOwner)));
+    }
+
+    cardOwnershipCache.set(card, { routeKey, userName: currentUserName, result, at: Date.now() });
+    return result;
   }
 
   function findMyCardsContainer() {
@@ -138,11 +155,13 @@
     return excludedByClass || excludedByStatus;
   }
 
-  function shouldThemeCard(card, myCardsContainerOverride = undefined) {
-    if (isMyCardsPage()) return true;
+  function shouldThemeCard(card, myCardsContainerOverride = undefined, currentUserNameOverride = undefined) {
+    if (isMyCardsPage() || isStripeCardPage()) return true;
     if (!isOrgCardsPage()) return false;
 
-    const currentUserName = getCurrentUserName();
+    const currentUserName = currentUserNameOverride !== undefined
+      ? currentUserNameOverride
+      : getCurrentUserName();
     if (!currentUserName) return false;
 
     const myCardsContainer = myCardsContainerOverride !== undefined
@@ -191,18 +210,8 @@
           const img = data.customImage;
           if (!img) return;
 
-          const onOrgCards = isOrgCardsPage();
-          const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
           const cards = document.querySelectorAll('.card-skinner');
           cards.forEach(card => {
-            if (!shouldThemeCard(card, myCardsContainer)) {
-              resetCardTheme(card);
-              return;
-            }
-            if (isExcludedCard(card)) {
-              resetCardTheme(card);
-              return;
-            }
             const isFrozen = card.classList.contains('frozen');
             const shouldApply = (currentTheme === 'custom' || isFrozen) && currentTheme !== 'off';
             if (!shouldApply) return;
@@ -229,6 +238,7 @@
     const card = document.querySelector(CARD_SELECTOR);
     if (!card) return;
     cardClassObserver = new MutationObserver(muts => {
+      if (isSkinning) return;
       for (const m of muts) {
         if (m.type === 'attributes' && m.attributeName === 'class') {
           // Re-apply styling and image when the site changes card classes
@@ -262,24 +272,31 @@
   }
 
   function skinCards() {
-    const onOrgCards = isOrgCardsPage();
-    const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
+    if (isSkinning) return;
+    isSkinning = true;
+    try {
+      const onOrgCards = isOrgCardsPage();
+      const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
+      const currentUserName = onOrgCards ? getCurrentUserName() : '';
 
-    document.querySelectorAll(CARD_SELECTOR).forEach(card => {
-      if (!shouldThemeCard(card, myCardsContainer)) {
-        resetCardTheme(card);
-        return;
-      }
-      if (isExcludedCard(card)) {
-        resetCardTheme(card);
-        return;
-      }
-      if (!card.classList.contains("card-skinner")) {
-        card.classList.add("card-skinner");
-      }
-      applyTextColor(card);
-    });
-    hideOfficialFreezeUI();
+      document.querySelectorAll(CARD_SELECTOR).forEach(card => {
+        if (!shouldThemeCard(card, myCardsContainer, currentUserName)) {
+          resetCardTheme(card);
+          return;
+        }
+        if (isExcludedCard(card)) {
+          resetCardTheme(card);
+          return;
+        }
+        if (!card.classList.contains("card-skinner")) {
+          card.classList.add("card-skinner");
+        }
+        applyTextColor(card);
+      });
+      hideOfficialFreezeUI();
+    } finally {
+      isSkinning = false;
+    }
   }
   function ensureControlPanel() {
     if (document.getElementById('card-skinner-panel')) return;
@@ -456,7 +473,7 @@
   }
 
   function isAnyCardsPage() {
-    return isMyCardsPage() || isOrgCardsPage();
+    return isMyCardsPage() || isOrgCardsPage() || isStripeCardPage();
   }
 
   function startRouteRecovery() {
@@ -511,15 +528,9 @@
     retryCount++;
   }, 100); // Check every 100ms
 
-  const debouncedUpdate = debounce(() => {
-    ensureControlPanel();
-    skinCards();
-    applyCustomImage();
-    watchCardClass();
-  }, 120);
-
-  // More aggressive card detection - watch for new card elements specifically
+  // Watch for new card elements and URL changes
   new MutationObserver((mutations) => {
+    if (isSkinning) return;
     const currentUrl = location.pathname + location.search + location.hash;
     if (currentUrl !== lastObservedUrl) {
       lastObservedUrl = currentUrl;
@@ -556,6 +567,7 @@
   
   // Watch for data-dark attribute changes and re-apply text color
   new MutationObserver(() => {
+    if (isSkinning) return;
     skinCards();
   }).observe(document.documentElement, {
     attributes: true,
