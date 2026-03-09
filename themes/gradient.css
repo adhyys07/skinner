@@ -1,0 +1,35 @@
+.card-skinner {
+    position: relative !important;
+    overflow: hidden !important;
+    background-image: none !important;
+    background-color: transparent !important;
+}
+
+.card-skinner::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+    background-size: 200% 200%;
+    animation: skinnerGradient 4s ease infinite;
+    border-radius: 16px;
+    z-index: 1;
+    pointer-events: none;
+}
+
+@keyframes skinnerGradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.card-skinner .stripe-card__number,
+.card-skinner .stripe-card__name,
+.card-skinner span,
+.card-skinner p {
+    position: relative;
+    z-index: 3;
+    color: #ffffff !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+    font-weight: 600;
+}

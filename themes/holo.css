@@ -2,17 +2,20 @@
     position: relative !important;
     overflow: hidden !important;
     background-image: none !important;
-    background-color: #5d8a3c !important;
-    image-rendering: pixelated;
+    background-color: transparent !important;
 }
 
 .card-skinner::after {
     content: "";
     position: absolute;
     inset: 0;
-    background:
-        repeating-linear-gradient(0deg, transparent, transparent 7px, rgba(0,0,0,0.18) 7px, rgba(0,0,0,0.18) 8px),
-        repeating-linear-gradient(90deg, transparent, transparent 7px, rgba(0,0,0,0.18) 7px, rgba(0,0,0,0.18) 8px);
+    background: linear-gradient(
+        135deg,
+        #ff6b6b 0%, #feca57 20%, #48dbfb 40%,
+        #ff9ff3 60%, #54a0ff 80%, #ff6b6b 100%
+    );
+    background-size: 300% 300%;
+    animation: skinnerHolo 5s ease infinite;
     border-radius: 16px;
     z-index: 1;
     pointer-events: none;
@@ -22,11 +25,17 @@
     content: "";
     position: absolute;
     inset: 0;
-    border: 3px solid #3b5929;
+    border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 16px;
-    box-shadow: inset 2px 2px 0 #7ec850, inset -2px -2px 0 #4a6e30;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
     z-index: 2;
     pointer-events: none;
+}
+
+@keyframes skinnerHolo {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 .card-skinner .stripe-card__number,
@@ -36,7 +45,6 @@
     position: relative;
     z-index: 3;
     color: #ffffff !important;
-    text-shadow: 2px 2px 0 #3b5929;
-    font-weight: 700;
-    font-family: monospace;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    font-weight: 600;
 }

@@ -5,19 +5,76 @@
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <h3>Card Theme</h3>
-    <img src="/assets/hcb-dark.png" alt="hcb" class="logo">
-    <div class="grid">
-    <button data-theme="glassBtn">Glass</button>
-    <button data-theme="neonBtn">Neon</button>
-    <button data-theme="offBtn" class="ghost">Turn Off Overlays</button>
-    <label for="imageUpload" class="upload-btn">
-       📷 Upload Custom Image
-        <input type="file" id="imageUpload" accept="image/*" style="display: none;" /> 
+    <div class="header">
+        <h3>Skinner</h3>
+        <img src="/assets/hcb-dark.png" alt="hcb" class="logo">
     </div>
-    <div class="row" style="margin-top:10px ;">
-        <span>Status</span><span id="status">Idle</span>
+    <p class="subtitle">Pick a theme for your HCB cards</p>
+
+    <div class="theme-grid">
+        <button class="theme-card" data-theme="glass">
+            <div class="preview preview-glass">
+                <span class="preview-dots">•••• •••• 4788</span>
+            </div>
+            <span class="theme-label">Glass</span>
+        </button>
+        <button class="theme-card" data-theme="neon">
+            <div class="preview preview-neon">
+                <span class="preview-dots">•••• •••• 4788</span>
+            </div>
+            <span class="theme-label">Neon</span>
+        </button>
+        <button class="theme-card" data-theme="retro">
+            <div class="preview preview-retro">
+                <span class="preview-dots">•••• •••• 4788</span>
+            </div>
+            <span class="theme-label">Retro</span>
+        </button>
+        <button class="theme-card" data-theme="gradient">
+            <div class="preview preview-gradient">
+                <span class="preview-dots">•••• •••• 4788</span>
+            </div>
+            <span class="theme-label">Gradient</span>
+        </button>
+        <button class="theme-card" data-theme="holo">
+            <div class="preview preview-holo">
+                <span class="preview-dots">•••• •••• 4788</span>
+            </div>
+            <span class="theme-label">Holo</span>
+        </button>
+        <button class="theme-card" data-theme="minimal">
+            <div class="preview preview-minimal">
+                <span class="preview-dots">•••• •••• 4788</span>
+            </div>
+            <span class="theme-label">Minimal</span>
+        </button>
+        <button class="theme-card" data-theme="minecraft">
+            <div class="preview preview-minecraft">
+                <span class="preview-dots">•••• •••• 4788</span>
+            </div>
+            <span class="theme-label">Minecraft</span>
+        </button>
+        <button class="theme-card" data-theme="freeze">
+            <div class="preview preview-freeze">
+                <span class="preview-dots">•••• •••• 4788</span>
+            </div>
+            <span class="theme-label">Freeze</span>
+        </button>
     </div>
+
+    <div class="actions">
+        <label for="imageUpload" class="upload-btn">
+            📷 Upload Custom Image
+            <input type="file" id="imageUpload" accept="image/*" />
+        </label>
+        <button class="off-btn" data-theme="off">Turn Off Overlays</button>
+    </div>
+
+    <div class="status-bar">
+        <span class="status-dot"></span>
+        <span id="status">Idle</span>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html>

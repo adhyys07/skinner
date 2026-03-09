@@ -275,6 +275,12 @@
     if (isSkinning) return;
     isSkinning = true;
     try {
+      // When theme is off, reset all cards and bail
+      if (currentTheme === 'off') {
+        document.querySelectorAll(CARD_SELECTOR).forEach(card => resetCardTheme(card));
+        return;
+      }
+
       const onOrgCards = isOrgCardsPage();
       const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
       const currentUserName = onOrgCards ? getCurrentUserName() : '';
@@ -291,118 +297,19 @@
         if (!card.classList.contains("card-skinner")) {
           card.classList.add("card-skinner");
         }
+        // When not using custom theme, clear any leftover inline background from custom image
+        if (currentTheme !== 'custom') {
+          card.style.removeProperty('background-image');
+          card.style.removeProperty('background-size');
+          card.style.removeProperty('background-position');
+          card.style.removeProperty('background-repeat');
+        }
         applyTextColor(card);
       });
       hideOfficialFreezeUI();
     } finally {
       isSkinning = false;
     }
-  }
-  function ensureControlPanel() {
-    if (document.getElementById('card-skinner-panel')) return;
-
-    const style = document.createElement('style');
-    style.textContent = `
-      #card-skinner-panel {
-        position: fixed;
-        top: 16px;
-        right: 16px;
-        z-index: 99999;
-        background: rgba(20,22,28,0.92);
-        color: #e9ecf2;
-        border: 1px solid #2a2f3a;
-        border-radius: 10px;
-        padding: 10px;
-        width: 180px;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.4);
-        font-family: "Inter", system-ui, -apple-system, sans-serif;
-      }
-      #card-skinner-panel h4 { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
-      #card-skinner-panel button, #card-skinner-panel label.upload-btn {
-        width: 100%; padding: 8px; margin-top: 6px;
-        border: 1px solid #2a2f3a; border-radius: 8px;
-        background: #171b23; color: inherit; cursor: pointer;
-        font-weight: 600; text-align: center;
-      }
-      #card-skinner-panel button:hover, #card-skinner-panel label.upload-btn:hover { border-color: #5865f2; }
-      #card-skinner-panel button:active, #card-skinner-panel label.upload-btn:active { transform: translateY(1px); }
-      #card-skinner-status { display: block; margin-top: 8px; font-size: 12px; color: #9aa3b5; }
-      #card-skinner-panel input[type="file"] { display: none; }
-    `;
-    document.head.appendChild(style);
-
-    const panel = document.createElement('div');
-    panel.id = 'card-skinner-panel';
-    panel.innerHTML = `
-      <h4>Card Skinner</h4>
-      <button data-theme="glass">Glass Theme</button>
-      <button data-theme="neon">Neon Theme</button>
-      <button data-theme="off">Turn Off</button>
-      <label class="upload-btn">
-        📷 Upload Image
-        <input type="file" id="card-skinner-image-upload" accept="image/*" />
-      </label>
-      <span id="card-skinner-status">Loading...</span>
-    `;
-    document.body.appendChild(panel);
-
-    const setStatus = (msg, err = false) => {
-      const el = document.getElementById('card-skinner-status');
-      if (!el) return;
-      el.textContent = msg;
-      el.style.color = err ? '#ff5555' : '#50fa7b';
-    };
-
-    panel.querySelectorAll('button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const theme = btn.dataset.theme;
-        setStatus(`Applying ${theme === 'off' ? 'none' : theme}...`);
-        currentTheme = theme;
-        
-        // Apply immediately without reload
-        applyTheme(currentTheme);
-        skinCards();
-        applyCustomImage();
-        
-        // Persist to storage asynchronously
-        chrome.storage.sync.set({ theme }, () => {
-          const displayName = theme === 'off' ? 'Off' : theme.charAt(0).toUpperCase() + theme.slice(1);
-          setStatus(`${displayName} applied!`);
-          
-          // Reload page when turning off to restore original UI
-          if (theme === 'off') {
-            setTimeout(() => {
-              window.location.href = window.location.href;
-            }, 100);
-          }
-        });
-      });
-    });
-
-    const fileInput = panel.querySelector('#card-skinner-image-upload');
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      setStatus('Uploading...');
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const imageData = ev.target.result;
-        chrome.storage.local.set({ customImage: imageData }, () => {
-          if (chrome.runtime.lastError) {
-            setStatus('Upload failed', true);
-            return;
-          }
-          currentTheme = 'custom';
-          applyTheme('custom');
-          applyCustomImage();
-          chrome.storage.sync.set({ theme: 'custom' }, () => {
-            setStatus('Image applied!');
-          }); 
-        });
-      };
-      reader.onerror = () => setStatus('Read failed', true);
-      reader.readAsDataURL(file);
-    });
   }
 
   function loadThemeAndSkin() {
@@ -445,11 +352,6 @@
   function initializeExtension() {
     lastInitAt = Date.now();
     loadThemeAndSkin();
-    
-    // Ensure panel is created
-    if (document.body) {
-      ensureControlPanel();
-    }
   }
 
   function scheduleInitialize(delay = 0) {
