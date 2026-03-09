@@ -2,126 +2,21 @@
   console.log("[Card Skinner] Loaded in:", location.href);
 
   const CARD_SELECTOR = ".stripe-card.virtual.mt1";
-  const USER_NAME_SELECTOR = '[class~="text-left"][class~="flex-1"][class~="truncate"][class~="hidden"][class~="lg:block"]';
   const isMyCardsPage = () => /\/my\/cards\/?$/.test(location.pathname);
   const isStripeCardPage = () => /^\/stripe_cards\//.test(location.pathname);
   const isOrgCardsPage = () => /^\/[^/]+\/cards\/?$/.test(location.pathname) && !isMyCardsPage();
 
-  let cachedMyCardsContainer = null;
-  let cachedMyCardsPath = '';
-  let cachedMyCardsAt = 0;
   let cardClassObserver = null;
   let scheduledInitTimer = null;
   let lastInitAt = 0;
   let lastObservedUrl = location.pathname + location.search + location.hash;
   let routeRecoveryTimer = null;
   let routeRecoveryAttempts = 0;
-  let cachedCurrentUserName = '';
-  let cachedCurrentUserAt = 0;
-  const cardOwnershipCache = new WeakMap();
   const INIT_MIN_INTERVAL_MS = 120;
   let isSkinning = false;
 
   function normalizeText(value) {
     return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  }
-
-  function getCurrentUserName() {
-    const now = Date.now();
-    if (cachedCurrentUserName && now - cachedCurrentUserAt < 2000) {
-      return cachedCurrentUserName;
-    }
-
-    const candidates = Array.from(document.querySelectorAll(USER_NAME_SELECTOR));
-    let chosen = '';
-
-    // Avoid card-tile owner labels when detecting the signed-in user name.
-    const nonCardCandidates = candidates.filter(el => {
-      const host = el.closest("[data-testid='card-preview'], a, li, article");
-      return !(host && host.querySelector(CARD_SELECTOR));
-    });
-
-    // Prefer profile areas (nav/header/aside) over any other labels.
-    const profileNode = nonCardCandidates.find(el => el.closest('nav, header, aside'));
-    if (profileNode) {
-      chosen = normalizeText(profileNode.textContent);
-    }
-
-    if (!chosen) {
-      const firstNonEmpty = nonCardCandidates.find(el => normalizeText(el.textContent));
-      chosen = firstNonEmpty ? normalizeText(firstNonEmpty.textContent) : '';
-    }
-
-    cachedCurrentUserName = chosen;
-    cachedCurrentUserAt = now;
-    return cachedCurrentUserName;
-  }
-
-  function cardBelongsToCurrentUser(card, currentUserName) {
-    if (!currentUserName) return false;
-
-    const cacheEntry = cardOwnershipCache.get(card);
-    const routeKey = location.pathname;
-    if (
-      cacheEntry &&
-      cacheEntry.routeKey === routeKey &&
-      cacheEntry.userName === currentUserName &&
-      Date.now() - cacheEntry.at < 10000
-    ) {
-      return cacheEntry.result;
-    }
-
-    // Walk up at most 6 levels to find the nearest ancestor with an owner label.
-    let ownerText = '';
-    let node = card.parentElement;
-    for (let i = 0; i < 6 && node && node !== document.body; i++) {
-      const nameEl = node.querySelector(USER_NAME_SELECTOR);
-      if (nameEl) {
-        ownerText = normalizeText(nameEl.textContent);
-        break;
-      }
-      node = node.parentElement;
-    }
-
-    let result = false;
-    if (ownerText) {
-      const cleanOwner = ownerText.replace(/[.\u2026]+$/g, '').trim();
-      const cleanCurrent = currentUserName.replace(/[.\u2026]+$/g, '').trim();
-      result = cleanOwner === cleanCurrent ||
-        (cleanOwner.length >= 5 && cleanCurrent.length >= 5 &&
-         (cleanOwner.startsWith(cleanCurrent) || cleanCurrent.startsWith(cleanOwner)));
-    }
-
-    cardOwnershipCache.set(card, { routeKey, userName: currentUserName, result, at: Date.now() });
-    return result;
-  }
-
-  function findMyCardsContainer() {
-    const byTestId = document.querySelector("[data-testid='my-cards'], [data-testid='my-cards-section']");
-    if (byTestId) return byTestId;
-
-    const heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,[role='heading']"))
-      .find(el => /my\s*cards/i.test((el.textContent || "").trim()));
-    return heading ? heading.closest("section, article, [role='region'], .card--section, div") : null;
-  }
-
-  function getMyCardsContainer() {
-    const now = Date.now();
-    const path = location.pathname || '';
-    const cacheValid =
-      cachedMyCardsContainer &&
-      cachedMyCardsPath === path &&
-      now - cachedMyCardsAt < 1500 &&
-      document.contains(cachedMyCardsContainer);
-
-    if (cacheValid) {
-      return cachedMyCardsContainer;
-    }
-
-    cachedMyCardsContainer = findMyCardsContainer();
-    cachedMyCardsPath = path;
-    cachedMyCardsAt = now;
-    return cachedMyCardsContainer;
   }
 
   function resetCardTheme(card) {
@@ -155,24 +50,8 @@
     return excludedByClass || excludedByStatus;
   }
 
-  function shouldThemeCard(card, myCardsContainerOverride = undefined, currentUserNameOverride = undefined) {
-    if (isMyCardsPage() || isStripeCardPage()) return true;
-    if (!isOrgCardsPage()) return false;
-
-    const currentUserName = currentUserNameOverride !== undefined
-      ? currentUserNameOverride
-      : getCurrentUserName();
-    if (!currentUserName) return false;
-
-    const myCardsContainer = myCardsContainerOverride !== undefined
-      ? myCardsContainerOverride
-      : getMyCardsContainer();
-
-    // If a dedicated "My cards" section exists, card must be in it.
-    if (myCardsContainer && !myCardsContainer.contains(card)) return false;
-
-    // Always verify card ownership by user name on org pages.
-    return cardBelongsToCurrentUser(card, currentUserName);
+  function shouldThemeCard(card) {
+    return isMyCardsPage() || isStripeCardPage() || isOrgCardsPage();
   }
 
   function applyTheme(theme) {
@@ -285,12 +164,8 @@
         return;
       }
 
-      const onOrgCards = isOrgCardsPage();
-      const myCardsContainer = onOrgCards ? getMyCardsContainer() : null;
-      const currentUserName = onOrgCards ? getCurrentUserName() : '';
-
       document.querySelectorAll(CARD_SELECTOR).forEach(card => {
-        if (!shouldThemeCard(card, myCardsContainer, currentUserName)) {
+        if (!shouldThemeCard(card)) {
           resetCardTheme(card);
           return;
         }
@@ -391,7 +266,6 @@
     routeRecoveryAttempts = 0;
     routeRecoveryTimer = setInterval(() => {
       routeRecoveryAttempts += 1;
-      cachedMyCardsContainer = null;
       scheduleInitialize(0);
 
       const relevantPage = isMyCardsPage() || isOrgCardsPage();
@@ -440,7 +314,6 @@
     const currentUrl = location.pathname + location.search + location.hash;
     if (currentUrl !== lastObservedUrl) {
       lastObservedUrl = currentUrl;
-      cachedMyCardsContainer = null;
       scheduleInitializeBurst([0, 180, 700]);
       startRouteRecovery();
     }
@@ -487,7 +360,6 @@
 
   history.pushState = function(...args) {
     originalPushState.apply(this, args);
-    cachedMyCardsContainer = null;
     lastObservedUrl = location.pathname + location.search + location.hash;
     scheduleInitializeBurst([20, 180, 700]);
     startRouteRecovery();
@@ -495,7 +367,6 @@
 
   history.replaceState = function(...args) {
     originalReplaceState.apply(this, args);
-    cachedMyCardsContainer = null;
     lastObservedUrl = location.pathname + location.search + location.hash;
     scheduleInitializeBurst([20, 180, 700]);
     startRouteRecovery();
@@ -503,7 +374,6 @@
 
   // Also listen for popstate (back/forward buttons)
   window.addEventListener('popstate', () => {
-    cachedMyCardsContainer = null;
     lastObservedUrl = location.pathname + location.search + location.hash;
     scheduleInitializeBurst([20, 180, 700]);
     startRouteRecovery();
@@ -518,7 +388,6 @@
 
   // Handle back/forward cache restores where normal load/navigation hooks may not fire.
   window.addEventListener('pageshow', () => {
-    cachedMyCardsContainer = null;
     lastObservedUrl = location.pathname + location.search + location.hash;
     scheduleInitializeBurst([0, 160, 550]);
     startRouteRecovery();
