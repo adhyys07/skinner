@@ -8,17 +8,14 @@ It lets you apply built-in overlay themes or upload a custom image for your card
 ## Features
 
 - 8 built-in themes with visual previews in the popup:
-	- `Glass` — frosted glass blur effect
-	- `Neon` — vibrant green-to-purple gradient
-	- `Retro` — scanline CRT with red/blue tones
-	- `Gradient` — animated purple-pink shifting gradient
-	- `Holo` — rainbow holographic shimmer
-	- `Minimal` — clean dark card with subtle border
-	- `Minecraft` — pixelated grass-block grid
-	- `Freeze` — muted icy overlay for frozen cards
-- Custom card background image upload (stored in `chrome.storage.local`)
-- Theme persists with the help of `chrome.storage.sync`
-
+	- `Glass`: frosted glass blur effect
+	- `Neon` : vibrant green-to-purple gradient
+	- `Retro` : scanline CRT with red/blue tones
+	- `Gradient` : animated purple-pink shifting gradient
+	- `Holo` : rainbow holographic shimmer
+	- `Minimal` : clean dark card with subtle border
+	- `Minecraft` : pixelated grass-block grid
+	- `Freeze` : muted icy overlay for frozen cards
 
 ## Supported Pages
 
