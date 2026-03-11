@@ -18,8 +18,7 @@ It lets you apply built-in overlay themes or upload a custom image for your card
 	- `Freeze` — muted icy overlay for frozen cards
 - Custom card background image upload (stored in `chrome.storage.local`)
 - Theme persists with the help of `chrome.storage.sync`
-- Safety exclusions:
-	- canceled/deactivated cards are reset to provider default visuals
+
 
 ## Supported Pages
 
@@ -57,50 +56,15 @@ The popup updates storage and triggers theme application in the active tab.
 
 ## How It Works
 
-- Content script: `content/injector.js`
+- Content script: `content/injector.js` It injects all the data that is required for skinner to work!
 	- Adds/removes `.card-skinner` class
-	- Applies theme stylesheet via `themes/*.css`
+	- All the themes presets are applied via `themes/*.css`
 	- Applies custom image when selected
-	- Handles SPA route changes, visibility/focus restoration, and fallback re-apply logic
 - Popup UI:
-	- `popup/popup.html` — theme grid with mini card previews
-	- `popup/popup.js` — theme selection, active state, image upload
-	- `popup/popup.css` — dark UI with animated preview cards
+	- `popup/popup.html` — theme grid with all card previews
+	- `popup/popup.js` — logic handling for theme selection, active state, image upload
+	- `popup/popup.css` — it applies the theme and css for card theme selection popup box
 
-
-## Project Structure
-
-```text
-manifest.json
-assets/
-content/
-	injector.js
-popup/
-	popup.html
-	popup.css
-	popup.js
-themes/
-	glass.css
-	neon.css
-	retro.css
-	gradient.css
-	holo.css
-	minimal.css
-	minecraft.css
-	freeze.css
-	custom.css
-utils/
-	siteMap.js
-```
-
-## Permissions
-
-From `manifest.json`:
-
-- `storage`
-- `activeTab`
-- `scripting`
-- Host permission: `https://hcb.hackclub.com/*`
 
 ## Troubleshooting
 
