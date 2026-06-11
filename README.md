@@ -8,18 +8,14 @@ It lets you apply built-in overlay themes or upload a custom image for your card
 ## Features
 
 - 8 built-in themes with visual previews in the popup:
-	- `Glass` — frosted glass blur effect
-	- `Neon` — vibrant green-to-purple gradient
-	- `Retro` — scanline CRT with red/blue tones
-	- `Gradient` — animated purple-pink shifting gradient
-	- `Holo` — rainbow holographic shimmer
-	- `Minimal` — clean dark card with subtle border
-	- `Minecraft` — pixelated grass-block grid
-	- `Freeze` — muted icy overlay for frozen cards
-- Custom card background image upload (stored in `chrome.storage.local`)
-- Theme persists with the help of `chrome.storage.sync`
-- Safety exclusions:
-	- canceled/deactivated cards are reset to provider default visuals
+	- `Glass`: frosted glass blur effect
+	- `Neon` : vibrant green-to-purple gradient
+	- `Retro` : scanline CRT with red/blue tones
+	- `Gradient` : animated purple-pink shifting gradient
+	- `Holo` : rainbow holographic shimmer
+	- `Minimal` : clean dark card with subtle border
+	- `Minecraft` : pixelated grass-block grid
+	- `Freeze` : muted icy overlay for frozen cards
 
 ## Supported Pages
 
@@ -57,50 +53,15 @@ The popup updates storage and triggers theme application in the active tab.
 
 ## How It Works
 
-- Content script: `content/injector.js`
+- Content script: `content/injector.js` It injects all the data that is required for skinner to work!
 	- Adds/removes `.card-skinner` class
-	- Applies theme stylesheet via `themes/*.css`
+	- All the themes presets are applied via `themes/*.css`
 	- Applies custom image when selected
-	- Handles SPA route changes, visibility/focus restoration, and fallback re-apply logic
 - Popup UI:
-	- `popup/popup.html` — theme grid with mini card previews
-	- `popup/popup.js` — theme selection, active state, image upload
-	- `popup/popup.css` — dark UI with animated preview cards
+	- `popup/popup.html` — theme grid with all card previews
+	- `popup/popup.js` — logic handling for theme selection, active state, image upload
+	- `popup/popup.css` — it applies the theme and css for card theme selection popup box
 
-
-## Project Structure
-
-```text
-manifest.json
-assets/
-content/
-	injector.js
-popup/
-	popup.html
-	popup.css
-	popup.js
-themes/
-	glass.css
-	neon.css
-	retro.css
-	gradient.css
-	holo.css
-	minimal.css
-	minecraft.css
-	freeze.css
-	custom.css
-utils/
-	siteMap.js
-```
-
-## Permissions
-
-From `manifest.json`:
-
-- `storage`
-- `activeTab`
-- `scripting`
-- Host permission: `https://hcb.hackclub.com/*`
 
 ## Troubleshooting
 
@@ -116,7 +77,7 @@ From `manifest.json`:
 
 This project is an unofficial visual customization extension and is not affiliated with Hack Club.
 
-# Point to be Noted
+## Point to be Noted
 
 This extension is work in progress and this is just a very rough prototype so you may have bugs, errors and other issues. For the time being you cannot apply different themes to different cards. If you need a feature or want to report a bug then you can DM me on slack <a href="https://hackclub.enterprise.slack.com/team/U082UPTRQU8" target="_blank">~@Adhyys</a>
 
