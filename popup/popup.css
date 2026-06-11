@@ -268,7 +268,9 @@ body {
 }
 
 .scope-btn,
-.reset-card-btn {
+.reset-card-btn,
+.export-btn,
+.import-btn {
     border: 1px solid rgba(255, 255, 255, 0.16);
     background: rgba(255, 255, 255, 0.08);
     color: inherit;
@@ -287,6 +289,16 @@ body {
     opacity: 0.45;
 }
 
-.reset-card-btn {
+.reset-card-btn,
+.export-btn,
+.import-btn {
     width: 100%;
+    box-sizing: border-box;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.import-btn input[type="file"] {
+    display: none;
 }

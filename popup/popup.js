@@ -2,6 +2,7 @@ const DEFAULT_THEME = 'glass';
 let activeScope = 'global';
 let activeTab = null;
 let activeCardKey = null;
+let activeCardFingerprintKey = null;
 let currentTheme = DEFAULT_THEME;
 let cardThemes = {};
 
@@ -49,16 +50,41 @@ const themeName = (theme) => theme === 'off' ? 'Off' : theme.charAt(0).toUpperCa
 const getCardKeyFromUrl = (url) => {
     try {
         const { pathname } = new URL(url);
-        const match = pathname.match(/^\/stripe_cards\/[^/]+/);
+        const match = pathname.match(/^\/(?:stripe_cards|grants)\/[^/]+/);
         return match ? match[0] : null;
     } catch {
         return null;
     }
 };
 
+const getCardFingerprintFromTab = async (tabId) => {
+    try {
+        const [{ result }] = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: () => {
+                const card = document.querySelector('.stripe-card.mt1:not(.deactivated):not(.canceled):not(.canceled-left):not(.canceled-right)');
+                const numberText = card?.querySelector('.stripe-card__number')?.textContent || '';
+                const last4Match = numberText.match(/\b(\d{4})\b/);
+                return last4Match ? `last4:${last4Match[1]}` : null;
+            },
+        });
+        return result || null;
+    } catch {
+        return null;
+    }
+};
+
+const getActiveCardKeys = () => {
+    return Array.from(new Set([
+        activeCardKey,
+        activeCardFingerprintKey,
+    ].filter(Boolean)));
+};
+
 const getScopedTheme = () => {
     if (activeScope === 'card' && activeCardKey) {
-        return cardThemes[activeCardKey] || currentTheme;
+        const cardTheme = getActiveCardKeys().map(key => cardThemes[key]).find(Boolean);
+        return cardTheme || currentTheme;
     }
     return currentTheme;
 };
@@ -82,11 +108,11 @@ const setActiveScope = (scope) => {
     if (resetButton) resetButton.style.display = activeScope === 'card' ? '' : 'none';
 
     const theme = getScopedTheme();
-    setActiveCard(theme);
+    setActiveCard(theme);   
     updateStatus(activeScope === 'card'
         ? `This card: ${themeName(theme)}`
         : `Global: ${themeName(theme)}`,
-        theme === 'off' ? '' : 'success');
+        theme === 'off' ? '' : 'success');is 
 };
 
 const notifyActiveTab = async () => {
@@ -111,10 +137,10 @@ const saveTheme = async (theme) => {
     };
 
     if (activeScope === 'card' && activeCardKey) {
-        settings.cardThemes = {
-            ...settings.cardThemes,
-            [activeCardKey]: theme,
-        };
+        settings.cardThemes = { ...settings.cardThemes };
+        getActiveCardKeys().forEach(key => {
+            settings.cardThemes[key] = theme;
+        });
         cardThemes = settings.cardThemes;
     } else {
         settings.theme = theme;
@@ -132,6 +158,29 @@ const saveTheme = async (theme) => {
     await notifyActiveTab();
 };
 
+const saveCustomImage = async (imageData) => {
+    const accountKey = await getHcbAccountKey();
+    const data = await chrome.storage.local.get(['customImages']);
+    const customImages = data?.customImages || {};
+    const accountImages = customImages[accountKey] || {
+        global: null,
+        cards: {},
+    };
+
+    if (activeScope === 'card' && activeCardKey) {
+        accountImages.cards = { ...accountImages.cards };
+        getActiveCardKeys().forEach(key => {
+            accountImages.cards[key] = imageData;
+        });
+    } else {
+        accountImages.global = imageData;
+    }
+
+    customImages[accountKey] = accountImages;
+    await chrome.storage.local.set({ customImages });
+    await chrome.storage.local.remove('customImage');
+};
+
 const resetCurrentCard = async () => {
     if (!activeCardKey) {
         updateStatus('Open a card page first', 'error');
@@ -147,19 +196,85 @@ const resetCurrentCard = async () => {
     };
 
     settings.cardThemes = { ...settings.cardThemes };
-    delete settings.cardThemes[activeCardKey];
+    getActiveCardKeys().forEach(key => {
+        delete settings.cardThemes[key];
+    });
     cardThemes = settings.cardThemes;
 
     accountThemes[accountKey] = settings;
     await chrome.storage.sync.set({ accountThemes });
 
+    const localData = await chrome.storage.local.get(['customImages']);
+    const customImages = localData?.customImages || {};
+    if (customImages[accountKey]?.cards) {
+        const accountImages = {
+            ...customImages[accountKey],
+            cards: { ...customImages[accountKey].cards },
+        };
+        getActiveCardKeys().forEach(key => {
+            delete accountImages.cards[key];
+        });
+        customImages[accountKey] = accountImages;
+        await chrome.storage.local.set({ customImages });
+    }
+
     setActiveScope('card');
     await notifyActiveTab();
+};
+
+const exportThemes = async () => {
+    const syncData = await chrome.storage.sync.get(['accountThemes']);
+    const localData = await chrome.storage.local.get(['customImages']);
+    const backup = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        accountThemes: syncData.accountThemes || {},
+        customImages: localData.customImages || {},
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+        type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `skinner-themes-${Date.now()}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const importThemes = async (file) => {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+
+    if (!backup || backup.version !== 1) {
+        throw new Error('Unsupported Skinner backup file');
+    }
+
+    if (
+        typeof backup.accountThemes !== 'object' ||
+        backup.accountThemes === null ||
+        typeof backup.customImages !== 'object' ||
+        backup.customImages === null
+    ) {
+        throw new Error('Invalid Skinner backup file');
+    }
+
+    await chrome.storage.sync.set({
+        accountThemes: backup.accountThemes,
+    });
+    await chrome.storage.local.set({
+        customImages: backup.customImages,
+    });
+    await chrome.storage.local.remove('customImage');
+    await notifyActiveTab();
+    await initialize();
 };
 
 const initialize = async () => {
     [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     activeCardKey = activeTab?.url ? getCardKeyFromUrl(activeTab.url) : null;
+    activeCardFingerprintKey = activeTab?.id ? await getCardFingerprintFromTab(activeTab.id) : null;
 
     const accountKey = await getHcbAccountKey();
     const data = await chrome.storage.sync.get(['accountThemes']);
@@ -201,6 +316,33 @@ document.querySelector('.reset-card-btn')?.addEventListener('click', () => {
     });
 });
 
+document.querySelector('.export-btn')?.addEventListener('click', async () => {
+    try {
+        updateStatus('Exporting...', '');
+        await exportThemes();
+        updateStatus('Themes exported', 'success');
+    } catch (err) {
+        console.error(err);
+        updateStatus('Export failed', 'error');
+    }
+});
+
+document.getElementById('importThemeFile')?.addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        updateStatus('Importing...', '');
+        await importThemes(file);
+        updateStatus('Themes imported', 'success');
+    } catch (err) {
+        console.error(err);
+        updateStatus('Import failed', 'error');
+    } finally {
+        event.target.value = '';
+    }
+});
+
 document.getElementById('imageUpload').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -211,7 +353,7 @@ document.getElementById('imageUpload').addEventListener('change', (e) => {
     reader.onload = async (event) => {
         try {
             const imageData = event.target.result;
-            await chrome.storage.local.set({ customImage: imageData });
+            await saveCustomImage(imageData);
             await saveTheme('custom');
             updateStatus(activeScope === 'card' ? 'Custom image on this card' : 'Custom image applied', 'success');
         } catch (err) {
