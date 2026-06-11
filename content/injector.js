@@ -1,40 +1,126 @@
 (() => {
-  console.log("[Card Skinner] Loaded in:", location.href);
+  const CARD_SELECTOR = '.stripe-card.mt1';
+  const THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'freeze', 'custom'];
+  const DEFAULT_THEME = 'glass';
 
-  const CARD_SELECTOR = ".stripe-card.mt1";
-  const THEMES = ["glass", "neon", "retro", "gradient", "holo", "minimal", "minecraft", "freeze", "custom"];
   const isMyCardsPage = () => /\/my\/cards\/?$/.test(location.pathname);
   const isStripeCardPage = () => /^\/stripe_cards\//.test(location.pathname);
   const isOrgCardsPage = () => /^\/[^/]+\/cards\/?$/.test(location.pathname) && !isMyCardsPage();
+  const isAnyCardsPage = () => isMyCardsPage() || isOrgCardsPage() || isStripeCardPage();
 
-  let cardClassObserver = null;
-  let scheduledInitTimer = null;
-  let lastInitAt = 0;
-  let lastObservedUrl = location.pathname + location.search + location.hash;
-  let routeRecoveryTimer = null;
-  let routeRecoveryAttempts = 0;
-  const INIT_MIN_INTERVAL_MS = 120;
-  let isSkinning = false;
-  let currentTheme = "glass";
+  let currentTheme = DEFAULT_THEME;
   let currentCardThemes = {};
-  let themeStylesPromise = null;
+  let customImage = null;
+  let accountKeyPromise = null;
+  let stylePromise = null;
+  let settingsPromise = null;
+  let scheduledApply = false;
+  let isSkinning = false;
+  let lastObservedUrl = location.pathname + location.search + location.hash;
 
-  async function getHcbAccountKey(){
-    try{
-      const response = await fetch('/api/current/user', {
-        credentials: 'include',
-      });
+  async function getHcbAccountKey() {
+    if (accountKeyPromise) return accountKeyPromise;
 
-      if (!response.ok) return 'unknown-account';
+    accountKeyPromise = fetch('/api/current_user', { credentials: 'include' })
+      .then(response => response.ok ? response.json() : null)
+      .then(user => String(user?.id || user?.email || user?.name || 'unknown-account'))
+      .catch(() => 'unknown-account');
 
-      const user = await response.json();
-      return String(user.id || user.email || user.name || 'unknown-account');
-    } catch {
-      return 'unknown-account';
-    }
+    return accountKeyPromise;
   }
-  function normalizeText(value) {
-    return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  function rewriteThemeCss(css, theme) {
+    return css.replace(/\.card-skinner\b/g, `.card-skinner[data-skinner-theme="${theme}"]`);
+  }
+
+  function ensureThemeStyles() {
+    if (stylePromise) return stylePromise;
+
+    stylePromise = Promise.all(
+      THEMES.map(theme =>
+        fetch(chrome.runtime.getURL(`themes/${theme}.css`))
+          .then(response => response.ok ? response.text() : '')
+          .then(css => rewriteThemeCss(css, theme))
+          .catch(() => '')
+      )
+    ).then(cssParts => {
+      let style = document.getElementById('card-skinner-theme');
+      if (style && style.tagName !== 'STYLE') {
+        style.remove();
+        style = null;
+      }
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'card-skinner-theme';
+        (document.head || document.documentElement).appendChild(style);
+      }
+      style.textContent = cssParts.join('\n\n');
+    });
+
+    return stylePromise;
+  }
+
+  async function loadSettings() {
+    if (settingsPromise) return settingsPromise;
+
+    settingsPromise = Promise.all([
+      getHcbAccountKey(),
+      chrome.storage.sync.get(['accountThemes']),
+      chrome.storage.local.get(['customImage']),
+    ]).then(([accountKey, syncData, localData]) => {
+      const accountThemes = syncData?.accountThemes || {};
+      const settings = accountThemes[accountKey] || {};
+      currentTheme = settings.theme || DEFAULT_THEME;
+      currentCardThemes = settings.cardThemes || {};
+      customImage = localData?.customImage || null;
+    }).finally(() => {
+      settingsPromise = null;
+    });
+
+    return settingsPromise;
+  }
+
+  function scheduleApply() {
+    if (scheduledApply) return;
+    scheduledApply = true;
+
+    requestAnimationFrame(() => {
+      scheduledApply = false;
+      skinCards();
+    });
+  }
+
+  function refreshAndApply() {
+    loadSettings()
+      .then(() => ensureThemeStyles())
+      .then(scheduleApply)
+      .catch(() => {
+        currentTheme = DEFAULT_THEME;
+        currentCardThemes = {};
+        scheduleApply();
+      });
+  }
+
+  function getCardKey(card) {
+    const link = card.closest('a[href*="/stripe_cards/"]');
+    const href = link?.getAttribute('href');
+    if (href) {
+      try {
+        const url = new URL(href, location.origin);
+        const match = url.pathname.match(/^\/stripe_cards\/[^/]+/);
+        if (match) return match[0];
+      } catch {
+        return null;
+      }
+    }
+
+    const currentMatch = location.pathname.match(/^\/stripe_cards\/[^/]+/);
+    return currentMatch ? currentMatch[0] : null;
+  }
+
+  function getCardTheme(card) {
+    const cardKey = getCardKey(card);
+    return (cardKey && currentCardThemes[cardKey]) || currentTheme;
   }
 
   function resetCardTheme(card) {
@@ -54,12 +140,12 @@
   }
 
   function isExcludedCard(card) {
-    if (!card) return false;
+    if (!card) return true;
 
     const classBlob = [
       card.className || '',
       card.parentElement?.className || '',
-      card.closest('.stripe-card')?.className || ''
+      card.closest('.stripe-card')?.className || '',
     ].join(' ').toLowerCase();
 
     const excludedByClass = /\b(canceled|cancelled|deactivated|canceled-right|cancelled-right)\b/.test(classBlob);
@@ -69,407 +155,137 @@
     return excludedByClass || excludedByStatus;
   }
 
-  function shouldThemeCard(card) {
-    return isMyCardsPage() || isStripeCardPage() || isOrgCardsPage();
-  }
-
-  function getCardKey(card) {
-    const link = card.closest('a[href*="/stripe_cards/"]');
-    const href = link?.getAttribute('href');
-    if (href) {
-      try {
-        const url = new URL(href, location.origin);
-        const match = url.pathname.match(/^\/stripe_cards\/[^/]+/);
-        if (match) return match[0];
-      } catch (err) {
-        console.warn('[Card Skinner] Could not parse card link:', err);
-      }
-    }
-
-    const currentMatch = location.pathname.match(/^\/stripe_cards\/[^/]+/);
-    return currentMatch ? currentMatch[0] : null;
-  }
-
-  function getCardTheme(card) {
-    const cardKey = getCardKey(card);
-    return (cardKey && currentCardThemes[cardKey]) || currentTheme;
-  }
-
-  function rewriteThemeCss(css, theme) {
-    return css.replace(/\.card-skinner\b/g, `.card-skinner[data-skinner-theme="${theme}"]`);
-  }
-
-  function ensureThemeStyles() {
-    if (themeStylesPromise) return themeStylesPromise;
-
-    themeStylesPromise = Promise.all(
-      THEMES.map(theme =>
-        fetch(chrome.runtime.getURL(`themes/${theme}.css`))
-          .then(response => response.ok ? response.text() : '')
-          .then(css => rewriteThemeCss(css, theme))
-          .catch(err => {
-            console.warn(`[Card Skinner] Could not load ${theme} theme`, err);
-            return '';
-          })
-      )
-    ).then(cssParts => {
-      let style = document.getElementById('card-skinner-theme');
-      if (style && style.tagName !== 'STYLE') {
-        style.remove();
-        style = null;
-      }
-      if (!style) {
-        style = document.createElement('style');
-        style.id = 'card-skinner-theme';
-        document.head.appendChild(style);
-      }
-      style.textContent = cssParts.join('\n\n');
-    });
-
-    return themeStylesPromise;
-  }
-
   function applyTextColor(card, theme) {
-    if (theme !== "glass") return;
+    if (theme !== 'glass') return;
 
-    const htmlElement = document.documentElement;
-    const isDarkValue = htmlElement.getAttribute('data-dark');
+    const isDarkValue = document.documentElement.getAttribute('data-dark');
     const textColor = isDarkValue === 'false' ? '#000000' : '#ffffff';
-
-    console.log('[Card Skinner DEBUG] data-dark:', isDarkValue, 'text color:', textColor);
-
     card.querySelectorAll('.stripe-card__number, .stripe-card__name, span, p').forEach(el => {
       el.style.setProperty('color', textColor, 'important');
     });
   }
 
-  function applyCustomImage() {
-    try {
-      // Use chrome.storage.local for image storage (larger quota)
-      if (chrome && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(['customImage'], (data) => {
-          const img = data.customImage;
-          if (!img) return;
+  function applyCustomImage(card, theme) {
+    if (theme !== 'custom' || !customImage) return;
 
-          const cards = document.querySelectorAll('.card-skinner');
-          cards.forEach(card => {
-            const theme = getCardTheme(card);
-            const shouldApply = theme === 'custom';
-            if (!shouldApply) return;
-            console.log('[Card Skinner] Applying custom image');
-            // Apply image directly with !important to override theme CSS and official UI
-            card.style.setProperty('background-image', `url('${img}')`, 'important');
-            card.style.setProperty('background-size', 'cover', 'important');
-            card.style.setProperty('background-position', 'center', 'important');
-            card.style.setProperty('background-repeat', 'no-repeat', 'important');
-          });
-        });
-      }
-    } catch (err) {
-      console.log('[Card Skinner] Could not load custom image:', err);
-    }
-  }
-
-  // Observe class changes on the main card to re-apply when HCB toggles frozen state
-  function watchCardClass() {
-    if (cardClassObserver) {
-      cardClassObserver.disconnect();
-      cardClassObserver = null;
-    }
-    const card = document.querySelector(CARD_SELECTOR);
-    if (!card) return;
-    cardClassObserver = new MutationObserver(muts => {
-      if (isSkinning) return;
-      for (const m of muts) {
-        if (m.type === 'attributes' && m.attributeName === 'class') {
-          // Re-apply styling and image when the site changes card classes
-          skinCards();
-          applyCustomImage();
-        }
-      }
-    });
-    cardClassObserver.observe(card, { attributes: true, attributeFilter: ['class'] });
-  }
-
-  function hideOfficialFreezeUI() {
-    return;
+    card.style.setProperty('background-image', `url('${customImage}')`, 'important');
+    card.style.setProperty('background-size', 'cover', 'important');
+    card.style.setProperty('background-position', 'center', 'important');
+    card.style.setProperty('background-repeat', 'no-repeat', 'important');
   }
 
   function skinCards() {
-    if (isSkinning) return;
+    if (isSkinning || !isAnyCardsPage()) return;
     isSkinning = true;
+
     try {
       document.querySelectorAll(CARD_SELECTOR).forEach(card => {
         const theme = getCardTheme(card);
-        if (!shouldThemeCard(card)) {
+
+        if (isExcludedCard(card) || theme === 'off') {
           resetCardTheme(card);
           return;
         }
-        if (isExcludedCard(card)) {
-          resetCardTheme(card);
-          return;
-        }
-        if (theme === 'off') {
-          resetCardTheme(card);
-          return;
-        }
-        if (!card.classList.contains("card-skinner")) {
-          card.classList.add("card-skinner");
-        }
+
+        card.classList.add('card-skinner');
         card.dataset.skinnerTheme = theme;
-        // When not using custom theme, clear any leftover inline background from custom image
+
         if (theme !== 'custom') {
           card.style.removeProperty('background-image');
           card.style.removeProperty('background-size');
           card.style.removeProperty('background-position');
           card.style.removeProperty('background-repeat');
         }
+
         applyTextColor(card, theme);
+        applyCustomImage(card, theme);
       });
-      hideOfficialFreezeUI();
     } finally {
       isSkinning = false;
     }
   }
 
-  function loadThemeAndSkin() {
-    try {
-      const canGet = chrome && chrome.storage && chrome.storage.sync && typeof chrome.storage.sync.get === 'function';
-      if (canGet) {
-        chrome.storage.sync.get(["accountThemes"], async data => {
-          const accountKey = await getHcbAccountKey();
-          const accountThemes = data?.accountThemes || {};
-          const settings = accountThemes[accountKey] || {};
-          
-          currentTheme = settings.theme || 'glass';
-          currentCardThemes = settings.cardThemes || {};
+  function handlePossibleNavigation() {
+    const currentUrl = location.pathname + location.search + location.hash;
+    if (currentUrl === lastObservedUrl) return;
 
-            ensureThemeStyles().finally(() => {
-            skinCards();
-            applyCustomImage();
-            watchCardClass();
-  });
+    lastObservedUrl = currentUrl;
+    accountKeyPromise = null;
+    refreshAndApply();
+  }
+
+  function observeDom() {
+    if (!document.body) return;
+
+    new MutationObserver(mutations => {
+      if (isSkinning) return;
+      handlePossibleNavigation();
+
+      const hasCardChange = mutations.some(mutation => {
+        if (mutation.type === 'attributes') return true;
+        return Array.from(mutation.addedNodes).some(node => {
+          if (node.nodeType !== Node.ELEMENT_NODE) return false;
+          return node.matches?.(CARD_SELECTOR) || node.querySelector?.(CARD_SELECTOR);
+        });
       });
-        return;
-      }
-    } catch (e) {
-      console.warn('[Card Skinner] storage get failed, defaulting to glass', e);
-    }
-    currentTheme = "glass";
-    currentCardThemes = {};
-    ensureThemeStyles().finally(() => {
-      skinCards();
-      applyCustomImage();
-      watchCardClass();
+
+      if (hasCardChange) scheduleApply();
+    }).observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class'],
     });
   }
 
-  // Debounce function to prevent excessive calls
-  function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
+  function hookHistory(method) {
+    const original = history[method];
+    history[method] = function(...args) {
+      const result = original.apply(this, args);
+      handlePossibleNavigation();
+      scheduleApply();
+      return result;
     };
   }
 
-  // Robust initialization with multiple strategies
-  function initializeExtension() {
-    lastInitAt = Date.now();
-    loadThemeAndSkin();
-  }
-
-  function scheduleInitialize(delay = 0) {
-    const now = Date.now();
-    const wait = Math.max(delay, INIT_MIN_INTERVAL_MS - (now - lastInitAt));
-    if (scheduledInitTimer) {
-      clearTimeout(scheduledInitTimer);
-    }
-    scheduledInitTimer = setTimeout(() => {
-      scheduledInitTimer = null;
-      initializeExtension();
-    }, Math.max(0, wait));
-  }
-
-  function scheduleInitializeBurst(delays = [0, 180, 650]) {
-    delays.forEach((delay) => {
-      setTimeout(() => {
-        scheduleInitialize(0);
-      }, delay);
-    });
-  }
-
-  function isAnyCardsPage() {
-    return isMyCardsPage() || isOrgCardsPage() || isStripeCardPage();
-  }
-
-  function startRouteRecovery() {
-    if (routeRecoveryTimer) {
-      clearInterval(routeRecoveryTimer);
-      routeRecoveryTimer = null;
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes.accountThemes) {
+      settingsPromise = null;
+      refreshAndApply();
     }
 
-    routeRecoveryAttempts = 0;
-    routeRecoveryTimer = setInterval(() => {
-      routeRecoveryAttempts += 1;
-      scheduleInitialize(0);
-
-      const relevantPage = isMyCardsPage() || isOrgCardsPage();
-      const anyCards = Boolean(document.querySelector(CARD_SELECTOR));
-      const themedCards = Boolean(document.querySelector(`${CARD_SELECTOR}.card-skinner`));
-      const done = !relevantPage || (anyCards && themedCards) || routeRecoveryAttempts >= 16;
-      if (done) {
-        clearInterval(routeRecoveryTimer);
-        routeRecoveryTimer = null;
-      }
-    }, 250);
-  }
-
-  // IMMEDIATE execution - don't wait for anything
-  initializeExtension();
-
-  // Strategy 1: Immediate execution if DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => scheduleInitialize());
-  } else {
-    // DOM already ready, execute immediately
-    scheduleInitialize();
-  }
-
-  // Strategy 2: Wait for full page load
-  window.addEventListener('load', () => scheduleInitializeBurst([0, 120, 500]));
-
-  // Strategy 3: Aggressive retry with very fast interval
-  let retryCount = 0;
-  const maxRetries = 50; // 5 seconds total
-  const retryInterval = setInterval(() => {
-    const card = document.querySelector(CARD_SELECTOR);
-    if (card || retryCount >= maxRetries) {
-      clearInterval(retryInterval);
-      if (card) {
-        scheduleInitializeBurst([0, 140]);
-        startRouteRecovery();
-      }
+    if (area === 'local' && changes.customImage) {
+      customImage = changes.customImage.newValue || null;
+      scheduleApply();
     }
-    retryCount++;
-  }, 100); // Check every 100ms
-
-  // Watch for new card elements and URL changes
-  new MutationObserver((mutations) => {
-    if (isSkinning) return;
-    const currentUrl = location.pathname + location.search + location.hash;
-    if (currentUrl !== lastObservedUrl) {
-      lastObservedUrl = currentUrl;
-      scheduleInitializeBurst([0, 180, 700]);
-      startRouteRecovery();
-    }
-
-    let cardAdded = false;
-    for (const mutation of mutations) {
-      if (mutation.addedNodes.length) {
-        mutation.addedNodes.forEach(node => {
-          if (node.nodeType === 1) { // Element node
-            // Check if the added node is a card or contains a card
-            if (node.matches && node.matches(CARD_SELECTOR)) {
-              cardAdded = true;
-            } else if (node.querySelector && node.querySelector(CARD_SELECTOR)) {
-              cardAdded = true;
-            }
-          }
-        });
-      }
-    }
-    
-    if (cardAdded) {
-      // Card was just added, apply immediately
-      console.log('[Card Skinner] Card detected in DOM, applying theme...');
-      scheduleInitialize(0);
-    }
-  }).observe(document.body, {
-    childList: true,
-    subtree: true
   });
-  
-  // Watch for data-dark attribute changes and re-apply text color
-  new MutationObserver(() => {
-    if (isSkinning) return;
-    skinCards();
-  }).observe(document.documentElement, {
+
+  window.addEventListener('card-skinner-storage-changed', refreshAndApply);
+  window.addEventListener('popstate', refreshAndApply);
+  window.addEventListener('hashchange', refreshAndApply);
+  window.addEventListener('pageshow', refreshAndApply);
+  document.addEventListener('turbo:load', refreshAndApply);
+  document.addEventListener('turbo:frame-load', scheduleApply);
+
+  new MutationObserver(scheduleApply).observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ['data-dark']
+    attributeFilter: ['data-dark'],
   });
 
-  // Strategy 5: Handle SPA navigation (for client-side routing)
-  // Intercept pushState and replaceState to detect URL changes
-  const originalPushState = history.pushState;
-  const originalReplaceState = history.replaceState;
+  hookHistory('pushState');
+  hookHistory('replaceState');
 
-  history.pushState = function(...args) {
-    originalPushState.apply(this, args);
-    lastObservedUrl = location.pathname + location.search + location.hash;
-    scheduleInitializeBurst([20, 180, 700]);
-    startRouteRecovery();
+  ensureThemeStyles();
+  loadSettings();
+
+  const start = () => {
+    observeDom();
+    refreshAndApply();
   };
 
-  history.replaceState = function(...args) {
-    originalReplaceState.apply(this, args);
-    lastObservedUrl = location.pathname + location.search + location.hash;
-    scheduleInitializeBurst([20, 180, 700]);
-    startRouteRecovery();
-  };
-
-  // Also listen for popstate (back/forward buttons)
-  window.addEventListener('popstate', () => {
-    lastObservedUrl = location.pathname + location.search + location.hash;
-    scheduleInitializeBurst([20, 180, 700]);
-    startRouteRecovery();
-  });
-
-  // Listen for hashchange as well
-  window.addEventListener('hashchange', () => {
-    lastObservedUrl = location.pathname + location.search + location.hash;
-    scheduleInitializeBurst([50, 220]);
-    startRouteRecovery();
-  });
-
-  // Handle back/forward cache restores where normal load/navigation hooks may not fire.
-  window.addEventListener('pageshow', () => {
-    lastObservedUrl = location.pathname + location.search + location.hash;
-    scheduleInitializeBurst([0, 160, 550]);
-    startRouteRecovery();
-  });
-
-  window.addEventListener('card-skinner-storage-changed', () => {
-    scheduleInitializeBurst([0, 160]);
-  });
-
-  // Focus can return after tab/app switch without strong DOM mutation signals.
-  window.addEventListener('focus', () => {
-    if (!isAnyCardsPage()) return;
-    scheduleInitialize(40);
-  });
-
-  // Strategy 6: Re-apply when tab becomes visible (in case card loaded while tab was hidden)
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      scheduleInitializeBurst([50, 300]);
-      startRouteRecovery();
-    }
-  });
-
-  // Lightweight self-heal: only touch cards pages and only when cards exist but none are themed.
-  setInterval(() => {
-    if (currentTheme === 'off') return;
-    if (!isAnyCardsPage()) return;
-    const hasCard = Boolean(document.querySelector(CARD_SELECTOR));
-    if (!hasCard) return;
-    const hasThemedCard = Boolean(document.querySelector(`${CARD_SELECTOR}.card-skinner`));
-    if (!hasThemedCard) {
-      scheduleInitializeBurst([0, 220]);
-    }
-  }, 1800);
+  if (document.body) {
+    start();
+  } else {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  }
 })();

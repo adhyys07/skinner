@@ -168,7 +168,7 @@ const initialize = async () => {
 
     currentTheme = settings.theme || DEFAULT_THEME;
     cardThemes = settings.cardThemes || {};
-    
+
     setActiveScope(activeCardKey ? 'card' : 'global');
 };
 

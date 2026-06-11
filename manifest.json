@@ -17,7 +17,8 @@
         "content_scripts": [
         {
             "matches": ["https://hcb.hackclub.com/*"],
-            "js": ["content/injector.js"]
+            "js": ["content/injector.js"],
+            "run_at": "document_start"
         }
       ],
       "web_accessible_resources": [
