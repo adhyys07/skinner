@@ -1,3 +1,39 @@
+const DEFAULT_THEME = 'glass';
+let activeScope = 'global';
+let activeTab = null;
+let activeCardKey = null;
+let currentTheme = DEFAULT_THEME;
+let cardThemes = {};
+
+async function getHcbAccountKey() {
+    try {
+        const [tab] = await chrome.tabs.query({active : true, currentWindow: true});
+        if (!tab?.id) return 'unknown-account';
+
+        const [{ result }] = await chrome.scripting.executeScript({
+            target : {tabId: tab.id},
+            func: async () => {
+                try {
+                    const response = await fetch('/api/current_user', {
+                        credentials : 'include',
+                    });
+
+                    if (!response.ok) return 'unknown-account';
+
+                    const user = await response.json();
+                    return String(user.id || user.email || user.name || 'unknown-account');
+                } catch {
+                    return 'unknown-account';
+                }
+            },
+        });
+
+        return result || 'unknown-account';
+    } catch{
+        return 'unknown-account';
+    }
+}
+
 const updateStatus = (message, type = '') => {
     const statusEl = document.getElementById('status');
     const bar = document.querySelector('.status-bar');
@@ -8,63 +44,163 @@ const updateStatus = (message, type = '') => {
     }
 };
 
+const themeName = (theme) => theme === 'off' ? 'Off' : theme.charAt(0).toUpperCase() + theme.slice(1);
+
+const getCardKeyFromUrl = (url) => {
+    try {
+        const { pathname } = new URL(url);
+        const match = pathname.match(/^\/stripe_cards\/[^/]+/);
+        return match ? match[0] : null;
+    } catch {
+        return null;
+    }
+};
+
+const getScopedTheme = () => {
+    if (activeScope === 'card' && activeCardKey) {
+        return cardThemes[activeCardKey] || currentTheme;
+    }
+    return currentTheme;
+};
+
 const setActiveCard = (theme) => {
     document.querySelectorAll('.theme-card').forEach(card => {
         card.classList.toggle('active', card.dataset.theme === theme);
     });
 };
 
-// Load current theme on popup open
-chrome.storage.sync.get(['theme'], (data) => {
-    const theme = data?.theme || 'glass';
+const setActiveScope = (scope) => {
+    activeScope = scope === 'card' && activeCardKey ? 'card' : 'global';
+    document.querySelectorAll('.scope-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.scope === activeScope);
+    });
+
+    const cardButton = document.querySelector('.scope-btn[data-scope="card"]');
+    if (cardButton) cardButton.disabled = !activeCardKey;
+
+    const resetButton = document.querySelector('.reset-card-btn');
+    if (resetButton) resetButton.style.display = activeScope === 'card' ? '' : 'none';
+
+    const theme = getScopedTheme();
     setActiveCard(theme);
-    const name = theme === 'off' ? 'Off' : theme.charAt(0).toUpperCase() + theme.slice(1);
-    updateStatus(`Active: ${name}`, theme === 'off' ? '' : 'success');
+    updateStatus(activeScope === 'card'
+        ? `This card: ${themeName(theme)}`
+        : `Global: ${themeName(theme)}`,
+        theme === 'off' ? '' : 'success');
+};
+
+const notifyActiveTab = async () => {
+    if (!activeTab?.id) return;
+    try {
+        await chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: () => window.dispatchEvent(new CustomEvent('card-skinner-storage-changed')),
+        });
+    } catch (err) {
+        console.warn('Card Skinner content script was not available in this tab.', err);
+    }
+};
+
+const saveTheme = async (theme) => {
+    const accountKey = await getHcbAccountKey();
+    const data = await chrome.storage.sync.get(['accountThemes']);
+    const accountThemes = data?.accountThemes || {};
+    const settings = accountThemes[accountKey] || {
+        theme: DEFAULT_THEME,
+        cardThemes: {},
+    };
+
+    if (activeScope === 'card' && activeCardKey) {
+        settings.cardThemes = {
+            ...settings.cardThemes,
+            [activeCardKey]: theme,
+        };
+        cardThemes = settings.cardThemes;
+    } else {
+        settings.theme = theme;
+        currentTheme = theme;
+    }
+
+    accountThemes[accountKey] = settings;
+    await chrome.storage.sync.set({ accountThemes });
+
+    setActiveCard(theme);
+    updateStatus(activeScope === 'card'
+        ? `This card: ${themeName(theme)}`
+        : `Global: ${themeName(theme)}`,
+        theme === 'off' ? '' : 'success');
+    await notifyActiveTab();
+};
+
+const resetCurrentCard = async () => {
+    if (!activeCardKey) {
+        updateStatus('Open a card page first', 'error');
+        return;
+    }
+
+    const accountKey = await getHcbAccountKey();
+    const data = await chrome.storage.sync.get(['accountThemes']);
+    const accountThemes = data?.accountThemes || {};
+    const settings = accountThemes[accountKey] || {
+        theme: DEFAULT_THEME,
+        cardThemes: {},
+    };
+
+    settings.cardThemes = { ...settings.cardThemes };
+    delete settings.cardThemes[activeCardKey];
+    cardThemes = settings.cardThemes;
+
+    accountThemes[accountKey] = settings;
+    await chrome.storage.sync.set({ accountThemes });
+
+    setActiveScope('card');
+    await notifyActiveTab();
+};
+
+const initialize = async () => {
+    [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    activeCardKey = activeTab?.url ? getCardKeyFromUrl(activeTab.url) : null;
+
+    const accountKey = await getHcbAccountKey();
+    const data = await chrome.storage.sync.get(['accountThemes']);
+    const accountThemes = data?.accountThemes || {};
+    const settings = accountThemes[accountKey] || {};
+
+    currentTheme = settings.theme || DEFAULT_THEME;
+    cardThemes = settings.cardThemes || {};
+    
+    setActiveScope(activeCardKey ? 'card' : 'global');
+};
+
+document.querySelectorAll('.scope-btn').forEach(btn => {
+    btn.addEventListener('click', () => setActiveScope(btn.dataset.scope));
 });
 
-// Theme card buttons
 document.querySelectorAll('.theme-card, .off-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab) { updateStatus('No active tab', 'error'); return; }
-
         const theme = btn.dataset.theme;
-        if (!theme) { updateStatus('Invalid theme', 'error'); return; }
+        if (!theme) {
+            updateStatus('Invalid theme', 'error');
+            return;
+        }
 
         updateStatus('Applying...', '');
-        setActiveCard(theme);
-
-        const site = new URL(tab.url).hostname;
-        chrome.storage.sync.set({ theme, [site]: theme });
-
-        chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: (themeName) => {
-                const linkId = 'card-skinner-theme';
-                let link = document.getElementById(linkId);
-                if (!link) {
-                    link = document.createElement('link');
-                    link.id = linkId;
-                    link.rel = 'stylesheet';
-                    document.head.appendChild(link);
-                }
-                link.href = chrome.runtime.getURL(`themes/${themeName}.css`);
-                location.reload();
-            },
-            args: [theme],
-        }).then(() => {
-            if (theme === 'off') {
-                updateStatus('Overlays off', '');
-                setActiveCard('');
-            } else {
-                const name = theme.charAt(0).toUpperCase() + theme.slice(1);
-                updateStatus(`Active: ${name}`, 'success');
-            }
-        }).catch(() => updateStatus('Failed to apply', 'error'));
+        try {
+            await saveTheme(theme);
+        } catch (err) {
+            console.error(err);
+            updateStatus('Failed to apply', 'error');
+        }
     });
 });
 
-// Image upload
+document.querySelector('.reset-card-btn')?.addEventListener('click', () => {
+    resetCurrentCard().catch(err => {
+        console.error(err);
+        updateStatus('Failed to reset card', 'error');
+    });
+});
+
 document.getElementById('imageUpload').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -72,38 +208,22 @@ document.getElementById('imageUpload').addEventListener('change', (e) => {
     updateStatus('Uploading...', '');
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-        const imageData = event.target.result;
-        chrome.storage.local.set({ customImage: imageData }, () => {
-            if (chrome.runtime.lastError) {
-                updateStatus('Upload failed', 'error');
-                return;
-            }
-            chrome.storage.sync.set({ theme: 'custom' }, () => {
-                updateStatus('Custom image applied!', 'success');
-                setActiveCard('');
-                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                    if (tabs[0]) chrome.tabs.reload(tabs[0].id);
-                });
-            });
-        });
+    reader.onload = async (event) => {
+        try {
+            const imageData = event.target.result;
+            await chrome.storage.local.set({ customImage: imageData });
+            await saveTheme('custom');
+            updateStatus(activeScope === 'card' ? 'Custom image on this card' : 'Custom image applied', 'success');
+        } catch (err) {
+            console.error(err);
+            updateStatus('Upload failed', 'error');
+        }
     };
     reader.onerror = () => updateStatus('Failed to read image', 'error');
     reader.readAsDataURL(file);
 });
 
-// Add event listener for the new button
-const offButton = document.querySelector('button[data-theme="off"], button[data-theme="offBtn"]');
-if (offButton) {
-    offButton.onclick = turnOffOverlays;
-}
-
-// Load and display current theme on popup open
-chrome.storage.sync.get(['theme'], (data) => {
-    const current = data?.theme || 'glass';
-    if (current === 'off') {
-        updateStatus('Overlays off');
-    } else {
-        updateStatus(`Active: ${current.charAt(0).toUpperCase() + current.slice(1)}`);
-    }
+initialize().catch(err => {
+    console.error(err);
+    updateStatus('Could not load settings', 'error');
 });

@@ -1,7 +1,8 @@
 (() => {
   console.log("[Card Skinner] Loaded in:", location.href);
 
-  const CARD_SELECTOR = ".stripe-card.virtual.mt1";
+  const CARD_SELECTOR = ".stripe-card.mt1";
+  const THEMES = ["glass", "neon", "retro", "gradient", "holo", "minimal", "minecraft", "freeze", "custom"];
   const isMyCardsPage = () => /\/my\/cards\/?$/.test(location.pathname);
   const isStripeCardPage = () => /^\/stripe_cards\//.test(location.pathname);
   const isOrgCardsPage = () => /^\/[^/]+\/cards\/?$/.test(location.pathname) && !isMyCardsPage();
@@ -14,13 +15,31 @@
   let routeRecoveryAttempts = 0;
   const INIT_MIN_INTERVAL_MS = 120;
   let isSkinning = false;
+  let currentTheme = "glass";
+  let currentCardThemes = {};
+  let themeStylesPromise = null;
 
+  async function getHcbAccountKey(){
+    try{
+      const response = await fetch('/api/current/user', {
+        credentials: 'include',
+      });
+
+      if (!response.ok) return 'unknown-account';
+
+      const user = await response.json();
+      return String(user.id || user.email || user.name || 'unknown-account');
+    } catch {
+      return 'unknown-account';
+    }
+  }
   function normalizeText(value) {
     return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
   function resetCardTheme(card) {
     card.classList.remove('card-skinner');
+    card.removeAttribute('data-skinner-theme');
     card.style.removeProperty('background-image');
     card.style.removeProperty('background-size');
     card.style.removeProperty('background-position');
@@ -54,25 +73,64 @@
     return isMyCardsPage() || isStripeCardPage() || isOrgCardsPage();
   }
 
-  function applyTheme(theme) {
-    let link = document.getElementById("card-skinner-theme");
-    if (theme === 'off') {
-      if (link) link.remove();
-      return;
+  function getCardKey(card) {
+    const link = card.closest('a[href*="/stripe_cards/"]');
+    const href = link?.getAttribute('href');
+    if (href) {
+      try {
+        const url = new URL(href, location.origin);
+        const match = url.pathname.match(/^\/stripe_cards\/[^/]+/);
+        if (match) return match[0];
+      } catch (err) {
+        console.warn('[Card Skinner] Could not parse card link:', err);
+      }
     }
-    if (!link) {
-      link = document.createElement("link");
-      link.id = "card-skinner-theme";
-      link.rel = "stylesheet";
-      document.head.appendChild(link);
-    }
-    link.href = chrome.runtime.getURL(`themes/${theme}.css`);
+
+    const currentMatch = location.pathname.match(/^\/stripe_cards\/[^/]+/);
+    return currentMatch ? currentMatch[0] : null;
   }
 
-  let currentTheme = "glass";
+  function getCardTheme(card) {
+    const cardKey = getCardKey(card);
+    return (cardKey && currentCardThemes[cardKey]) || currentTheme;
+  }
 
-  function applyTextColor(card) {
-    if (currentTheme !== "glass") return;
+  function rewriteThemeCss(css, theme) {
+    return css.replace(/\.card-skinner\b/g, `.card-skinner[data-skinner-theme="${theme}"]`);
+  }
+
+  function ensureThemeStyles() {
+    if (themeStylesPromise) return themeStylesPromise;
+
+    themeStylesPromise = Promise.all(
+      THEMES.map(theme =>
+        fetch(chrome.runtime.getURL(`themes/${theme}.css`))
+          .then(response => response.ok ? response.text() : '')
+          .then(css => rewriteThemeCss(css, theme))
+          .catch(err => {
+            console.warn(`[Card Skinner] Could not load ${theme} theme`, err);
+            return '';
+          })
+      )
+    ).then(cssParts => {
+      let style = document.getElementById('card-skinner-theme');
+      if (style && style.tagName !== 'STYLE') {
+        style.remove();
+        style = null;
+      }
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'card-skinner-theme';
+        document.head.appendChild(style);
+      }
+      style.textContent = cssParts.join('\n\n');
+    });
+
+    return themeStylesPromise;
+  }
+
+  function applyTextColor(card, theme) {
+    if (theme !== "glass") return;
 
     const htmlElement = document.documentElement;
     const isDarkValue = htmlElement.getAttribute('data-dark');
@@ -95,8 +153,8 @@
 
           const cards = document.querySelectorAll('.card-skinner');
           cards.forEach(card => {
-            const isFrozen = card.classList.contains('frozen');
-            const shouldApply = (currentTheme === 'custom' || isFrozen) && currentTheme !== 'off';
+            const theme = getCardTheme(card);
+            const shouldApply = theme === 'custom';
             if (!shouldApply) return;
             console.log('[Card Skinner] Applying custom image');
             // Apply image directly with !important to override theme CSS and official UI
@@ -134,37 +192,15 @@
   }
 
   function hideOfficialFreezeUI() {
-    if (currentTheme !== 'freeze') return;
-    
-    // Hide all elements around the card that contain freeze-related UI
-    const card = document.querySelector(CARD_SELECTOR);
-    if (!card) return;
-    
-    // Hide parent containers with freeze info/actions
-    const parent = card.closest('div');
-    if (parent) {
-      // Hide siblings containing freeze status, buttons, etc.
-      Array.from(parent.parentElement.querySelectorAll('div, section, aside')).forEach(el => {
-        const text = el.textContent || '';
-        if (text.includes('Frozen') || text.includes('Defrost') || text.includes('Get reimbursed') || 
-            text.includes('Freeze') || text.includes('reimbursement') || text.includes('frozen')) {
-          el.style.display = 'none';
-        }
-      });
-    }
+    return;
   }
 
   function skinCards() {
     if (isSkinning) return;
     isSkinning = true;
     try {
-      // When theme is off, only reset cards we previously themed
-      if (currentTheme === 'off') {
-        document.querySelectorAll(`${CARD_SELECTOR}.card-skinner`).forEach(card => resetCardTheme(card));
-        return;
-      }
-
       document.querySelectorAll(CARD_SELECTOR).forEach(card => {
+        const theme = getCardTheme(card);
         if (!shouldThemeCard(card)) {
           resetCardTheme(card);
           return;
@@ -173,17 +209,22 @@
           resetCardTheme(card);
           return;
         }
+        if (theme === 'off') {
+          resetCardTheme(card);
+          return;
+        }
         if (!card.classList.contains("card-skinner")) {
           card.classList.add("card-skinner");
         }
+        card.dataset.skinnerTheme = theme;
         // When not using custom theme, clear any leftover inline background from custom image
-        if (currentTheme !== 'custom') {
+        if (theme !== 'custom') {
           card.style.removeProperty('background-image');
           card.style.removeProperty('background-size');
           card.style.removeProperty('background-position');
           card.style.removeProperty('background-repeat');
         }
-        applyTextColor(card);
+        applyTextColor(card, theme);
       });
       hideOfficialFreezeUI();
     } finally {
@@ -195,23 +236,32 @@
     try {
       const canGet = chrome && chrome.storage && chrome.storage.sync && typeof chrome.storage.sync.get === 'function';
       if (canGet) {
-        chrome.storage.sync.get(["theme"], data => {
-          currentTheme = data?.theme || "glass";
-          applyTheme(currentTheme);
-          skinCards();
-          applyCustomImage();
-          watchCardClass();
-        });
+        chrome.storage.sync.get(["accountThemes"], async data => {
+          const accountKey = await getHcbAccountKey();
+          const accountThemes = data?.accountThemes || {};
+          const settings = accountThemes[accountKey] || {};
+          
+          currentTheme = settings.theme || 'glass';
+          currentCardThemes = settings.cardThemes || {};
+
+            ensureThemeStyles().finally(() => {
+            skinCards();
+            applyCustomImage();
+            watchCardClass();
+  });
+      });
         return;
       }
     } catch (e) {
       console.warn('[Card Skinner] storage get failed, defaulting to glass', e);
     }
     currentTheme = "glass";
-    applyTheme(currentTheme);
-    skinCards();
-    applyCustomImage();
-    watchCardClass();
+    currentCardThemes = {};
+    ensureThemeStyles().finally(() => {
+      skinCards();
+      applyCustomImage();
+      watchCardClass();
+    });
   }
 
   // Debounce function to prevent excessive calls
@@ -391,6 +441,10 @@
     lastObservedUrl = location.pathname + location.search + location.hash;
     scheduleInitializeBurst([0, 160, 550]);
     startRouteRecovery();
+  });
+
+  window.addEventListener('card-skinner-storage-changed', () => {
+    scheduleInitializeBurst([0, 160]);
   });
 
   // Focus can return after tab/app switch without strong DOM mutation signals.

@@ -11,52 +11,57 @@
     </div>
     <p class="subtitle">Pick a theme for your HCB cards</p>
 
+    <div class="scope-switch" role="group" aria-label="Theme scope">
+        <button class="scope-btn active" data-scope="global" type="button">Global</button>
+        <button class="scope-btn" data-scope="card" type="button">This card</button>
+    </div>
+
     <div class="theme-grid">
         <button class="theme-card" data-theme="glass">
             <div class="preview preview-glass">
-                <span class="preview-dots">•••• •••• 4788</span>
+                <span class="preview-dots">.... .... 4788</span>
             </div>
             <span class="theme-label">Glass</span>
         </button>
         <button class="theme-card" data-theme="neon">
             <div class="preview preview-neon">
-                <span class="preview-dots">•••• •••• 4788</span>
+                <span class="preview-dots">.... .... 4788</span>
             </div>
             <span class="theme-label">Neon</span>
         </button>
         <button class="theme-card" data-theme="retro">
             <div class="preview preview-retro">
-                <span class="preview-dots">•••• •••• 4788</span>
+                <span class="preview-dots">.... .... 4788</span>
             </div>
             <span class="theme-label">Retro</span>
         </button>
         <button class="theme-card" data-theme="gradient">
             <div class="preview preview-gradient">
-                <span class="preview-dots">•••• •••• 4788</span>
+                <span class="preview-dots">.... .... 4788</span>
             </div>
             <span class="theme-label">Gradient</span>
         </button>
         <button class="theme-card" data-theme="holo">
             <div class="preview preview-holo">
-                <span class="preview-dots">•••• •••• 4788</span>
+                <span class="preview-dots">.... .... 4788</span>
             </div>
             <span class="theme-label">Holo</span>
         </button>
         <button class="theme-card" data-theme="minimal">
             <div class="preview preview-minimal">
-                <span class="preview-dots">•••• •••• 4788</span>
+                <span class="preview-dots">.... .... 4788</span>
             </div>
             <span class="theme-label">Minimal</span>
         </button>
         <button class="theme-card" data-theme="minecraft">
             <div class="preview preview-minecraft">
-                <span class="preview-dots">•••• •••• 4788</span>
+                <span class="preview-dots">.... .... 4788</span>
             </div>
             <span class="theme-label">Minecraft</span>
         </button>
         <button class="theme-card" data-theme="freeze">
             <div class="preview preview-freeze">
-                <span class="preview-dots">•••• •••• 4788</span>
+                <span class="preview-dots">.... .... 4788</span>
             </div>
             <span class="theme-label">Freeze</span>
         </button>
@@ -64,10 +69,11 @@
 
     <div class="actions">
         <label for="imageUpload" class="upload-btn">
-            📷 Upload Custom Image
+            Upload Custom Image
             <input type="file" id="imageUpload" accept="image/*" />
         </label>
         <button class="off-btn" data-theme="off">Turn Off Overlays</button>
+        <button class="reset-card-btn" type="button">Use Global Theme</button>
     </div>
 
     <div class="status-bar">

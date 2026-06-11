@@ -260,3 +260,33 @@ body {
 .status-bar.success { color: #4ade80; }
 .status-bar.error .status-dot { background: #f87171; }
 .status-bar.error { color: #f87171; }
+.scope-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin: 10px 0 14px;
+}
+
+.scope-btn,
+.reset-card-btn {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+}
+
+.scope-btn.active {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.scope-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.reset-card-btn {
+    width: 100%;
+}
