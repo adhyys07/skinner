@@ -112,7 +112,7 @@ const setActiveScope = (scope) => {
     updateStatus(activeScope === 'card'
         ? `This card: ${themeName(theme)}`
         : `Global: ${themeName(theme)}`,
-        theme === 'off' ? '' : 'success');is 
+        theme === 'off' ? '' : 'success');
 };
 
 const notifyActiveTab = async () => {

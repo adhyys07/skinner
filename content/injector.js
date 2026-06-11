@@ -2,8 +2,11 @@
   const CARD_SELECTOR = '.stripe-card.mt1:not(.deactivated):not(.canceled):not(.canceled-left):not(.canceled-right)';
   const RESET_SELECTOR = '.stripe-card.card-skinner, .stripe-card[data-skinner-theme], .stripe-card[data-skinner-original-style]';
   const THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'freeze', 'custom'];
+  const CARD_MENU_THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'freeze'];
   const DEFAULT_THEME = 'glass';
   const ORIGINAL_STYLE_ATTR = 'data-skinner-original-style';
+  const CARD_ACTION_CLASS = 'skinner-card-action';
+  const CARD_MENU_ID = 'skinner-card-theme-menu';
 
   const isHomePage = () => location.pathname === '/';
   const isMyCardsPage = () => /\/my\/cards\/?$/.test(location.pathname);
@@ -96,6 +99,57 @@
 
 .canceled-card-wrapper .stripe-card.canceled-right {
   display: none !important;
+}
+
+.${CARD_ACTION_CLASS} {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  z-index: 30 !important;
+  border: 1px solid rgba(255, 255, 255, 0.26) !important;
+  border-radius: 999px !important;
+  padding: 4px 8px !important;
+  background: rgba(15, 17, 21, 0.62) !important;
+  color: #ffffff !important;
+  cursor: pointer !important;
+  font: 700 11px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  letter-spacing: 0 !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.${CARD_ACTION_CLASS}:hover {
+  background: rgba(15, 17, 21, 0.84) !important;
+}
+
+#${CARD_MENU_ID} {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(88px, 1fr)) !important;
+  gap: 6px !important;
+  width: 196px !important;
+  padding: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 10px !important;
+  background: rgba(15, 17, 21, 0.96) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+#${CARD_MENU_ID} button {
+  min-height: 30px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  cursor: pointer !important;
+  font: 700 11px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+#${CARD_MENU_ID} button:hover,
+#${CARD_MENU_ID} button[aria-pressed="true"] {
+  border-color: rgba(255, 255, 255, 0.44) !important;
+  background: rgba(255, 255, 255, 0.18) !important;
 }`;
     });
 
@@ -212,6 +266,10 @@
     clearTextOverrides(card);
   }
 
+  function removeCardControls(card) {
+    card.querySelector(`.${CARD_ACTION_CLASS}`)?.remove();
+  }
+
   function isExcludedCard(card) {
     if (!card) return true;
     if (card.closest('.canceled-card-wrapper')) return true;
@@ -281,6 +339,101 @@
     card.style.setProperty('background-repeat', 'no-repeat', 'important');
   }
 
+  async function saveCardTheme(card, theme) {
+    const cardKeys = getCardKeys(card);
+    if (!cardKeys.length) return;
+
+    const accountKey = await getHcbAccountKey();
+    const data = await chrome.storage.sync.get(['accountThemes']);
+    const accountThemes = data?.accountThemes || {};
+    const settings = accountThemes[accountKey] || {
+      theme: DEFAULT_THEME,
+      cardThemes: {},
+    };
+
+    settings.cardThemes = { ...settings.cardThemes };
+    if (theme === 'global') {
+      cardKeys.forEach(key => {
+        delete settings.cardThemes[key];
+      });
+    } else {
+      cardKeys.forEach(key => {
+        settings.cardThemes[key] = theme;
+      });
+    }
+
+    accountThemes[accountKey] = settings;
+    await chrome.storage.sync.set({ accountThemes });
+    currentCardThemes = settings.cardThemes;
+    closeCardThemeMenu();
+    scheduleApply();
+  }
+
+  function closeCardThemeMenu() {
+    document.getElementById(CARD_MENU_ID)?.remove();
+  }
+
+  function positionCardThemeMenu(menu, anchor) {
+    const rect = anchor.getBoundingClientRect();
+    const gap = 8;
+    const left = Math.min(window.innerWidth - menu.offsetWidth - gap, Math.max(gap, rect.right - menu.offsetWidth));
+    const top = Math.min(window.innerHeight - menu.offsetHeight - gap, Math.max(gap, rect.bottom + gap));
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  }
+
+  function openCardThemeMenu(card, anchor) {
+    closeCardThemeMenu();
+
+    const current = getCardTheme(card);
+    const menu = document.createElement('div');
+    menu.id = CARD_MENU_ID;
+    menu.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    const options = [
+      ['global', 'Use global'],
+      ...CARD_MENU_THEMES.map(theme => [theme, theme.charAt(0).toUpperCase() + theme.slice(1)]),
+      ['off', 'Off'],
+    ];
+
+    options.forEach(([theme, label]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.setAttribute('aria-pressed', theme === current ? 'true' : 'false');
+      button.addEventListener('click', () => {
+        saveCardTheme(card, theme).catch(err => console.warn('[Card Skinner] Could not save card theme', err));
+      });
+      menu.appendChild(button);
+    });
+
+    document.body.appendChild(menu);
+    positionCardThemeMenu(menu, anchor);
+
+    setTimeout(() => {
+      document.addEventListener('click', closeCardThemeMenu, { once: true });
+    }, 0);
+  }
+
+  function addCardThemeButton(card) {
+    if (card.querySelector(`.${CARD_ACTION_CLASS}`)) return;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = CARD_ACTION_CLASS;
+    button.textContent = 'Skin';
+    button.title = 'Change this card theme';
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openCardThemeMenu(card, button);
+    });
+    card.appendChild(button);
+  }
+
   function skinCards() {
     if (isSkinning || !isAnyCardsPage()) return;
     isSkinning = true;
@@ -289,6 +442,9 @@
       document.querySelectorAll(RESET_SELECTOR).forEach(card => {
         if (isExcludedCard(card) || !isCurrentUserCard(card) || getCardTheme(card) === 'off') {
           resetCardTheme(card);
+          if (isExcludedCard(card) || !isCurrentUserCard(card)) {
+            removeCardControls(card);
+          }
         }
       });
 
@@ -297,6 +453,11 @@
 
         if (isExcludedCard(card) || !isCurrentUserCard(card) || theme === 'off') {
           resetCardTheme(card);
+          if (isExcludedCard(card) || !isCurrentUserCard(card)) {
+            removeCardControls(card);
+          } else {
+            addCardThemeButton(card);
+          }
           return;
         }
 
@@ -311,6 +472,7 @@
         clearTextOverrides(card);
         applyTextColor(card, theme);
         applyCustomImage(card, theme);
+        addCardThemeButton(card);
       });
     } finally {
       isSkinning = false;
@@ -374,6 +536,11 @@
   });
 
   window.addEventListener('card-skinner-storage-changed', refreshAndApply);
+  window.addEventListener('resize', closeCardThemeMenu);
+  window.addEventListener('scroll', closeCardThemeMenu, true);
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeCardThemeMenu();
+  });
   window.addEventListener('popstate', refreshAndApply);
   window.addEventListener('hashchange', refreshAndApply);
   window.addEventListener('pageshow', refreshAndApply);
