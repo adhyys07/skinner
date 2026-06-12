@@ -197,6 +197,13 @@
 .${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="minecraft"]::before {
   border: 3px solid #3b5929 !important;
   box-shadow: inset 2px 2px 0 #7ec850, inset -2px -2px 0 #4a6e30 !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="custom"]::before,
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="custom"]::after {
+  content: "" !important;
+  background: rgba(0, 0, 0, 0.18) !important;
+  border-radius: inherit !important;
 }`;
     });
 
@@ -424,11 +431,29 @@
     return normalizeText(ownerSpan?.textContent);
   }
 
+  function getGrantRecipientName() {
+    const header = getGrantHeader();
+    const text = header?.textContent || '';
+    const match = text.match(/Grant to\s+(.+?)\s+for\s+/i);
+    return normalizeText(match?.[1]);
+  }
+
+  function textMatchesCurrentUser(value) {
+    const normalized = normalizeText(value);
+    if (!normalized) return false;
+
+    return getCurrentUserNames().some(name => normalized === name);
+  }
+
   function isCurrentUserCard(card) {
-    if (isHomePage() || isMyCardsPage() || isStripeCardPage() || isGrantPage()) return true;
+    if (isHomePage() || isMyCardsPage()) return true;
 
     const userNames = getCurrentUserNames();
     if (!userNames.length) return false;
+
+    if (isGrantPage()) {
+      return textMatchesCurrentUser(getGrantRecipientName());
+    }
 
     const ownerName = getCardOwnerName(card);
     return Boolean(ownerName && userNames.includes(ownerName));
@@ -479,10 +504,13 @@
     if (theme === 'custom') {
       const image = getCustomImageForCard(card);
       if (!image) return;
+      header.style.removeProperty('background-color');
+      header.style.setProperty('background-color', 'transparent', 'important');
       header.style.setProperty('background-image', `url('${image}')`, 'important');
       header.style.setProperty('background-size', 'cover', 'important');
       header.style.setProperty('background-position', 'center', 'important');
       header.style.setProperty('background-repeat', 'no-repeat', 'important');
+      header.style.setProperty('background-blend-mode', 'normal', 'important');
       return;
     }
 
@@ -494,6 +522,7 @@
     header.style.setProperty('background-size', 'cover', 'important');
     header.style.setProperty('background-position', 'center', 'important');
     header.style.setProperty('background-repeat', 'no-repeat', 'important');
+    header.style.removeProperty('background-blend-mode');
   }
 
   async function saveCardTheme(card, theme) {
