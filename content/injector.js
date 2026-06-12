@@ -7,6 +7,7 @@
   const ORIGINAL_STYLE_ATTR = 'data-skinner-original-style';
   const CARD_ACTION_CLASS = 'skinner-card-action';
   const CARD_MENU_ID = 'skinner-card-theme-menu';
+  const GRANT_HEADER_CLASS = 'skinner-grant-header';
 
   const isHomePage = () => location.pathname === '/';
   const isMyCardsPage = () => /\/my\/cards\/?$/.test(location.pathname);
@@ -150,6 +151,52 @@
 #${CARD_MENU_ID} button[aria-pressed="true"] {
   border-color: rgba(255, 255, 255, 0.44) !important;
   background: rgba(255, 255, 255, 0.18) !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner > * {
+  position: relative !important;
+  z-index: 4 !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner::before,
+.${GRANT_HEADER_CLASS}.card-skinner::after {
+  border-radius: inherit !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="glass"] {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  background-image: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.03)) !important;
+  border-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="glass"]::after {
+  background: rgba(255, 255, 255, 0.04) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 32px rgba(31, 38, 135, 0.24) !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="minecraft"] {
+  background-color: #5d8a3c !important;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(0,0,0,0.16) 31px, rgba(0,0,0,0.16) 32px),
+    repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(0,0,0,0.16) 31px, rgba(0,0,0,0.16) 32px) !important;
+  image-rendering: pixelated !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="minecraft"]::after {
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 7px, rgba(0,0,0,0.14) 7px, rgba(0,0,0,0.14) 8px),
+    repeating-linear-gradient(90deg, transparent, transparent 7px, rgba(0,0,0,0.14) 7px, rgba(0,0,0,0.14) 8px) !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="minecraft"]::before {
+  border: 3px solid #3b5929 !important;
+  box-shadow: inset 2px 2px 0 #7ec850, inset -2px -2px 0 #4a6e30 !important;
 }`;
     });
 
@@ -270,6 +317,77 @@
     card.querySelector(`.${CARD_ACTION_CLASS}`)?.remove();
   }
 
+  function getGrantHeader() {
+    if (!isGrantPage()) return null;
+
+    const manageControl = Array.from(document.querySelectorAll('a, button'))
+      .find(el => normalizeText(el.textContent).includes('manage grant'));
+
+    for (let el = manageControl?.parentElement; el && el !== document.body; el = el.parentElement) {
+      const text = el.textContent || '';
+      const rect = el.getBoundingClientRect();
+      if (
+        text.includes('Grant to') &&
+        text.includes('Manage grant') &&
+        rect.width > 280 &&
+        rect.height > 120 &&
+        rect.height < 420
+      ) {
+        return el;
+      }
+    }
+
+    return Array.from(document.querySelectorAll('section, article, div'))
+      .filter(el => {
+        const text = el.textContent || '';
+        const rect = el.getBoundingClientRect();
+        return text.includes('Grant to') &&
+          text.includes('Manage grant') &&
+          rect.width > 280 &&
+          rect.height > 120 &&
+          rect.height < 420;
+      })
+      .sort((a, b) => {
+        const aRect = a.getBoundingClientRect();
+        const bRect = b.getBoundingClientRect();
+        return (aRect.width * aRect.height) - (bRect.width * bRect.height);
+      })[0] || null;
+  }
+
+  function skinGrantHeader(card, theme) {
+    const header = getGrantHeader();
+    if (!header) return;
+
+    if (theme === 'off') {
+      header.classList.remove('card-skinner');
+      header.classList.remove(GRANT_HEADER_CLASS);
+      header.removeAttribute('data-skinner-theme');
+      restoreOriginalStyle(header);
+      clearTextOverrides(header);
+      return;
+    }
+
+    rememberOriginalStyle(header);
+    restoreOriginalStyle(header, { keepSnapshot: true });
+    clearTextOverrides(header);
+    header.classList.add('card-skinner');
+    header.classList.add(GRANT_HEADER_CLASS);
+    header.dataset.skinnerTheme = theme;
+    applyGrantHeaderBackground(header, card, theme);
+  }
+
+  function resetGrantHeader() {
+    const header = getGrantHeader();
+    if (!header) return;
+
+    header.classList.remove('card-skinner');
+    header.classList.remove(GRANT_HEADER_CLASS);
+    header.removeAttribute('data-skinner-theme');
+    restoreOriginalStyle(header);
+    clearTextOverrides(header);
+  }
+
+
   function isExcludedCard(card) {
     if (!card) return true;
     if (card.closest('.canceled-card-wrapper')) return true;
@@ -329,14 +447,53 @@
   function applyCustomImage(card, theme) {
     if (theme !== 'custom') return;
 
-    const cardKeys = getCardKeys(card);
-    const image = cardKeys.map(key => currentCustomImages.cards?.[key]).find(Boolean) || customImage;
+    const image = getCustomImageForCard(card);
     if (!image) return;
 
     card.style.setProperty('background-image', `url('${image}')`, 'important');
     card.style.setProperty('background-size', 'cover', 'important');
     card.style.setProperty('background-position', 'center', 'important');
     card.style.setProperty('background-repeat', 'no-repeat', 'important');
+  }
+
+  function getCustomImageForCard(card) {
+    const cardKeys = getCardKeys(card);
+    return cardKeys.map(key => currentCustomImages.cards?.[key]).find(Boolean) || customImage;
+  }
+
+  function applyGrantHeaderBackground(header, card, theme) {
+    const themeBackgrounds = {
+      glass: { color: 'rgba(255, 255, 255, 0.06)', image: 'linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.03))' },
+      neon: { color: 'transparent', image: 'linear-gradient(135deg, #00feba, #5b548a)' },
+      retro: { color: '#1a1a2e', image: 'linear-gradient(135deg, #e94560 0%, #0f3460 50%, #16213e 100%)' },
+      gradient: { color: 'transparent', image: 'linear-gradient(135deg, #667eea, #764ba2, #f093fb)' },
+      holo: { color: 'transparent', image: 'linear-gradient(135deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff)' },
+      minimal: { color: '#1a1d23', image: 'none' },
+      minecraft: {
+        color: '#5d8a3c',
+        image: 'repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(0,0,0,0.16) 31px, rgba(0,0,0,0.16) 32px), repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(0,0,0,0.16) 31px, rgba(0,0,0,0.16) 32px)',
+      },
+      freeze: { color: 'rgba(100, 150, 200, 0.3)', image: 'linear-gradient(135deg, rgba(100,150,200,0.3), rgba(150,180,220,0.2))' },
+    };
+
+    if (theme === 'custom') {
+      const image = getCustomImageForCard(card);
+      if (!image) return;
+      header.style.setProperty('background-image', `url('${image}')`, 'important');
+      header.style.setProperty('background-size', 'cover', 'important');
+      header.style.setProperty('background-position', 'center', 'important');
+      header.style.setProperty('background-repeat', 'no-repeat', 'important');
+      return;
+    }
+
+    const background = themeBackgrounds[theme];
+    if (!background) return;
+
+    header.style.setProperty('background-color', background.color, 'important');
+    header.style.setProperty('background-image', background.image, 'important');
+    header.style.setProperty('background-size', 'cover', 'important');
+    header.style.setProperty('background-position', 'center', 'important');
+    header.style.setProperty('background-repeat', 'no-repeat', 'important');
   }
 
   async function saveCardTheme(card, theme) {
@@ -453,6 +610,7 @@
 
         if (isExcludedCard(card) || !isCurrentUserCard(card) || theme === 'off') {
           resetCardTheme(card);
+          if (isGrantPage()) resetGrantHeader();
           if (isExcludedCard(card) || !isCurrentUserCard(card)) {
             removeCardControls(card);
           } else {
@@ -473,6 +631,7 @@
         applyTextColor(card, theme);
         applyCustomImage(card, theme);
         addCardThemeButton(card);
+        skinGrantHeader(card, theme);
       });
     } finally {
       isSkinning = false;

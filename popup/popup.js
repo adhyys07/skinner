@@ -126,6 +126,25 @@ const notifyActiveTab = async () => {
         console.warn('Card Skinner content script was not available in this tab.', err);
     }
 };
+const normalizeImageUrl = (value) => {
+    const raw = value.trim();
+    if (!raw) throw new Error('Missing Image URL');
+
+    const url = new URL(raw);
+
+    if (!['https:', 'http:', 'data:'].includes(url.protocol)) {
+        throw new Error('Unsupported image URL');
+    }
+
+    return url.href;
+};
+
+const loadImageUrl = (url) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(url);
+    img.onerror = reject;
+    img.src = url;
+});
 
 const saveTheme = async (theme) => {
     const accountKey = await getHcbAccountKey();
@@ -340,6 +359,31 @@ document.getElementById('importThemeFile')?.addEventListener('change', async (ev
         updateStatus('Import failed', 'error');
     } finally {
         event.target.value = '';
+    }
+});
+
+document.getElementById('applyImageUrlBtn')?.addEventListener('click', async()=>{
+    const input = document.getElementById('imageUrlInput')
+    if (!input) return;
+
+    try {
+        updateStatus('Applying Image..', '');
+
+        const imageUrl = normalizeImageUrl(input.value);
+        await loadImageUrl(imageUrl);
+        await saveCustomImage(imageUrl);
+        await saveTheme('custom');
+
+        updateStatus(
+            activeScope === 'card'
+                ? 'Image URL on this card'
+                : 'Image URL applied',
+            'success'
+        );
+        input.value = '';
+    } catch (err){
+        console.error(err);
+        updateStatus('Invalid Image URL', 'error');
     }
 });
 

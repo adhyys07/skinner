@@ -302,3 +302,35 @@ body {
 .import-btn input[type="file"] {
     display: none;
 }
+
+.image-url-row{
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+}
+
+.image-url-row input{
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.08);
+    color: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.image-url-row input:focus{
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+.image-url-row button {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+}
