@@ -45,6 +45,56 @@ const updateStatus = (message, type = '') => {
     }
 };
 
+const UPSCALE_TARGET = {
+    width: 1800,
+    height: 1100,
+    quality: 0.94,
+};
+
+const loadImageElement = (src) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not load image for upscaling.'));
+    img.src = src;
+});
+
+const upscaleImageDataUrl = async (imageDataUrl, options = UPSCALE_TARGET) => {
+    const img = await loadImageElement(imageDataUrl);
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = options.width;
+    canvas.height = options.height;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    const sourceRatio = img.width / img.height;
+    const targetRatio = canvas.width / canvas.height;
+
+    let drawWidth;
+    let drawHeight;
+    let drawX;
+    let drawY;
+
+    if (sourceRatio > targetRatio) {
+        drawHeight = canvas.height;
+        drawWidth = drawHeight * sourceRatio;
+        drawX = (canvas.width - drawWidth) / 2;
+        drawY = 0;
+    } else {
+        drawWidth = canvas.width;
+        drawHeight = drawWidth / sourceRatio;
+        drawX = 0;
+        drawY = (canvas.height - drawHeight) / 2;
+    }
+
+    ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+
+    return canvas.toDataURL('image/jpeg', options.quality);
+};
+
 const themeName = (theme) => theme === 'off' ? 'Off' : theme.charAt(0).toUpperCase() + theme.slice(1);
 
 const getCardKeyFromUrl = (url) => {
@@ -397,7 +447,8 @@ document.getElementById('imageUpload').addEventListener('change', (e) => {
     reader.onload = async (event) => {
         try {
             const imageData = event.target.result;
-            await saveCustomImage(imageData);
+            const upscaledImage = await upscaleImageDataUrl(imageData);
+            await saveCustomImage(upscaledImage);
             await saveTheme('custom');
             updateStatus(activeScope === 'card' ? 'Custom image on this card' : 'Custom image applied', 'success');
         } catch (err) {

@@ -1,8 +1,8 @@
 (() => {
   const CARD_SELECTOR = '.stripe-card.mt1:not(.deactivated):not(.canceled):not(.canceled-left):not(.canceled-right)';
   const RESET_SELECTOR = '.stripe-card.card-skinner, .stripe-card[data-skinner-theme], .stripe-card[data-skinner-original-style]';
-  const THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'freeze', 'custom'];
-  const CARD_MENU_THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'freeze'];
+  const THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'custom'];
+  const CARD_MENU_THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft'];
   const DEFAULT_THEME = 'glass';
   const ORIGINAL_STYLE_ATTR = 'data-skinner-original-style';
   const CARD_ACTION_CLASS = 'skinner-card-action';
@@ -498,7 +498,6 @@
         color: '#5d8a3c',
         image: 'repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(0,0,0,0.16) 31px, rgba(0,0,0,0.16) 32px), repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(0,0,0,0.16) 31px, rgba(0,0,0,0.16) 32px)',
       },
-      freeze: { color: 'rgba(100, 150, 200, 0.3)', image: 'linear-gradient(135deg, rgba(100,150,200,0.3), rgba(150,180,220,0.2))' },
     };
 
     if (theme === 'custom') {

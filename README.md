@@ -8,7 +8,7 @@ images, and back up or restore your Skinner settings.
 
 ## Features
 
-- 8 built-in themes:
+- 7 built-in themes:
   - `Glass`: frosted glass effect
   - `Neon`: green-to-purple gradient
   - `Retro`: CRT-inspired red/blue theme
@@ -16,11 +16,10 @@ images, and back up or restore your Skinner settings.
   - `Holo`: rainbow holographic shimmer
   - `Minimal`: clean dark card
   - `Minecraft`: pixelated grass-block grid
-  - `Freeze`: muted icy overlay
 - Global default theme from the extension popup.
 - Per-card themes using the in-card `Skin` button.
 - Per-card themes from the popup when viewing a specific card or grant page.
-- Custom card images from file upload.
+- Custom card images from file upload, with built-in browser resizing/upscaling.
 - Custom card images from direct image URLs.
 - Per-account settings, so different HCB accounts in the same browser profile do not share themes.
 - Export/import for saved themes and custom images.
@@ -50,7 +49,7 @@ the signed-in HCB user. Other people's cards should keep the official HCB design
 
 ### Release Build
 
-1. Go to the [Skinner releases](https://github.com/adhyys07/skinner/releases/tag/stable).
+1. Go to the [Skinner releases](https://github.com/adhyys07/skinner/releases).
 2. Download the latest `skinner.zip`.
 3. Extract it to a folder.
 4. Open your browser extension settings and enable developer mode.

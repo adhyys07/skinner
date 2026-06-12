@@ -171,14 +171,6 @@ body {
 }
 .preview-minecraft .preview-dots { color: #fff; text-shadow: 2px 2px 0 #3b5929; }
 
-/* Freeze */
-.preview-freeze {
-    background: linear-gradient(135deg, rgba(100,150,200,0.3), rgba(150,180,220,0.2));
-    filter: grayscale(40%) brightness(0.85);
-    border: 1px solid rgba(100,150,200,0.4);
-}
-.preview-freeze .preview-dots { color: #a0b8d0; }
-
 /* ---- Theme Label ---- */
 .theme-label {
     display: block;
