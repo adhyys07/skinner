@@ -6,13 +6,17 @@
     "permissions": [
         "storage",
         "activeTab",
-        "scripting"
+        "scripting",
+        "sidePanel"
     ],
     "host_permissions":[
         "https://hcb.hackclub.com/*"
     ],
     "action":{
         "default_popup": "popup/popup.html"
+        },
+        "side_panel": {
+            "default_path": "popup/sidepanel.html"
         },
         "content_scripts": [
         {

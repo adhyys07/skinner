@@ -1,4 +1,5 @@
 const DEFAULT_THEME = 'glass';
+const VIEW_MODE = new URLSearchParams(location.search).get('view') === 'sidepanel' ? 'sidepanel' : 'popup';
 let activeScope = 'global';
 let activeTab = null;
 let activeCardKey = null;
@@ -52,6 +53,8 @@ const updateStatus = (message, type = '') => {
         if (type) bar.classList.add(type);
     }
 };
+
+document.body.classList.toggle('sidepanel-view', VIEW_MODE === 'sidepanel');
 
 const UPSCALE_TARGET = {
     width: 1800,
@@ -331,6 +334,37 @@ const notifyActiveTab = async () => {
 };
 
 const refreshActiveTab = notifyActiveTab;
+
+const openSidebar = async () => {
+    if (!chrome.sidePanel?.open) {
+        updateStatus('Sidebar is not supported in this Chrome version', 'error');
+        return;
+    }
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.windowId) {
+        updateStatus('No active window found', 'error');
+        return;
+    }
+
+    await chrome.sidePanel.setOptions?.({
+        path: 'popup/sidepanel.html',
+        enabled: true,
+    });
+    await chrome.sidePanel.open({ windowId: tab.windowId });
+    window.close();
+};
+
+const closeSidebar = () => {
+    try {
+        window.top.close();
+    } catch {
+        window.close();
+    }
+    setTimeout(() => {
+        updateStatus('Use the browser side panel close button if it stays open', '');
+    }, 150);
+};
 
 const normalizeImageUrl = (value) => {
     const raw = value.trim();
@@ -757,6 +791,12 @@ document.querySelector('.reset-card-btn')?.addEventListener('click', () => {
         updateStatus('Failed to reset card', 'error');
     });
 });
+
+document.getElementById('openSidebarBtn')?.addEventListener('click', () => {
+    runAdvancedAction(openSidebar, 'Could not open sidebar');
+});
+
+document.getElementById('closeSidebarBtn')?.addEventListener('click', closeSidebar);
 
 document.querySelector('.export-btn')?.addEventListener('click', async () => {
     try {

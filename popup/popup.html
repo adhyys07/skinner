@@ -7,7 +7,10 @@
 <body>
     <div class="header">
         <h3>Skinner</h3>
-        <img src="/assets/hcb-dark.png" alt="hcb" class="logo">
+        <div class="header-actions">
+            <button id="closeSidebarBtn" class="icon-btn sidepanel-only" type="button" title="Close sidebar">×</button>
+            <img src="/assets/hcb-dark.png" alt="hcb" class="logo">
+        </div>
     </div>
     <p class="subtitle">Pick a theme for your HCB cards</p>
 
@@ -83,6 +86,7 @@
             Import Themes
             <input type="file" id="importThemeFile" accept="application/json,.json" />
         </label>
+        <button id="openSidebarBtn" class="sidebar-btn popup-only" type="button">Open Sidebar</button>
         <div class="advanced-tools">
             <input id="presetNameInput" type="text" placeholder="Preset Name" />
             <button id="savePresetBtn" type="button">Save Preset</button>

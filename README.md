@@ -18,6 +18,7 @@ images, and back up or restore your Skinner settings.
   - `Minecraft`: pixelated grass-block grid
   - `Animated`: moving multicolor gradient
 - Global default theme from the extension popup.
+- Popup mode and optional Chrome sidebar mode.
 - Per-card themes using the in-card `Skin` button.
 - Per-card themes from the popup when viewing a specific card or grant page.
 - Per-organization themes from supported organization pages.
@@ -72,6 +73,12 @@ the signed-in HCB user. Other people's cards should keep the official HCB design
 The global theme is used as the default for your cards unless a card has its own
 override.
 
+### Popup And Sidebar
+
+- Click the extension icon to use Skinner as a popup.
+- Click `Open Sidebar` to keep Skinner open in Chrome's side panel while you browse HCB.
+- Use the sidebar close button or Chrome's side panel close control to close it.
+
 ### Per-Card Theme
 
 Use either method:
@@ -109,7 +116,7 @@ The backup includes:
   - Applies per-card and global custom images.
   - Watches HCB navigation and Turbo updates.
 - `popup/popup.html`
-  - Theme grid, scope selector, image upload, URL image input, preset/editor/reset controls, export/import controls.
+  - Theme grid, scope selector, image upload, URL image input, sidebar controls, preset/editor/reset controls, export/import controls.
 - `popup/popup.js`
   - Handles theme selection, per-card and per-org overrides, presets, random themes, editor settings, image storage, export/import, and active tab refresh.
 - `popup/popup.css`
