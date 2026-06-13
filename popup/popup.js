@@ -6,8 +6,12 @@ let activeCardFingerprintKey = null;
 let activeOrgKey = null;
 let currentTheme = DEFAULT_THEME;
 let cardThemes = {};
+let accountKeyPromise = null;
 
 async function getHcbAccountKey() {
+    if (accountKeyPromise) return accountKeyPromise;
+
+    accountKeyPromise = (async () => {
     try {
         const [tab] = await chrome.tabs.query({active : true, currentWindow: true});
         if (!tab?.id) return 'unknown-account';
@@ -34,6 +38,9 @@ async function getHcbAccountKey() {
     } catch{
         return 'unknown-account';
     }
+    })();
+
+    return accountKeyPromise;
 }
 
 const updateStatus = (message, type = '') => {
@@ -124,8 +131,8 @@ const getAccountSettings = async () => {
     return normalizeAccountSettings(current);
 };
 
-const createAutoBackup = (settings) => {
-    const snapshot = {
+const createAutoBackupSnapshot = (settings) => {
+    return {
         createdAt: new Date().toISOString(),
         theme: settings.theme,
         cardThemes: settings.cardThemes,
@@ -135,11 +142,19 @@ const createAutoBackup = (settings) => {
         bannerSync: settings.bannerSync,
         randomizer: settings.randomizer,
     };
+};
 
-    return {
-        ...settings,
-        backups: [snapshot, ...(settings.backups || [])].slice(0, 5),
-    };
+const saveLocalBackup = async (accountKey, settings) => {
+    const data = await chrome.storage.local.get(['accountBackups']);
+    const accountBackups = data.accountBackups || {};
+    const backups = accountBackups[accountKey] || [];
+
+    accountBackups[accountKey] = [
+        createAutoBackupSnapshot(settings),
+        ...backups,
+    ].slice(0, 5);
+
+    await chrome.storage.local.set({ accountBackups });
 };
 
 const saveAccountSettings = async (settings, options = { backup: true }) => {
@@ -147,7 +162,11 @@ const saveAccountSettings = async (settings, options = { backup: true }) => {
     const syncData = await chrome.storage.sync.get(['accountThemes']);
     const accountThemes = syncData.accountThemes || {};
     const normalized = normalizeAccountSettings(settings);
-    const nextSettings = options.backup ? createAutoBackup(normalized) : normalized;
+    const { backups, ...nextSettings } = normalized;
+
+    if (options.backup) {
+        await saveLocalBackup(accountKey, normalized);
+    }
 
     accountThemes[accountKey] = nextSettings;
     currentTheme = nextSettings.theme || DEFAULT_THEME;
@@ -514,6 +533,10 @@ const resetImages = async () => {
     delete customImages[accountKey];
 
     await chrome.storage.local.set({ customImages });
+    const backupData = await chrome.storage.local.get(['accountBackups']);
+    const accountBackups = backupData.accountBackups || {};
+    delete accountBackups[accountKey];
+    await chrome.storage.local.set({ accountBackups });
     await refreshActiveTab();
 
     updateStatus('Images reset', 'success');

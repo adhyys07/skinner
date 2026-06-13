@@ -29,7 +29,9 @@
   let currentCustomImages = {};
   let currentEditor = {};
   let currentBannerSync = 'both';
+  let currentOrgKey = getOrgKeyFromLocation();
   let currentUser = null;
+  let currentUserNames = [];
   let customImage = null;
   let accountUserPromise = null;
   let accountKeyPromise = null;
@@ -37,10 +39,30 @@
   let settingsPromise = null;
   let scheduledApply = false;
   let isSkinning = false;
+  let cachedGrantHeader = null;
+  let cachedGrantHeaderUrl = '';
   let lastObservedUrl = location.pathname + location.search + location.hash;
 
   function normalizeText(value) {
     return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  function buildCurrentUserNames(user) {
+    const names = [
+      user?.name,
+      user?.full_name,
+      user?.preferred_name,
+    ].map(normalizeText).filter(Boolean);
+
+    return Array.from(new Set([
+      ...names,
+      ...names.map(name => name.split(' ')[0]).filter(Boolean),
+    ]));
+  }
+
+  function invalidateGrantHeaderCache() {
+    cachedGrantHeader = null;
+    cachedGrantHeaderUrl = '';
   }
 
   async function getHcbUser() {
@@ -252,6 +274,8 @@
       chrome.storage.local.get(['customImages']),
     ]).then(([user, syncData, localData]) => {
       currentUser = user;
+      currentUserNames = buildCurrentUserNames(user);
+      currentOrgKey = getOrgKeyFromLocation();
       const accountKey = String(user?.id || user?.email || user?.name || 'unknown-account');
       const accountThemes = syncData?.accountThemes || {};
       const settings = accountThemes[accountKey] || {};
@@ -289,6 +313,8 @@
         currentOrgThemes = {};
         currentEditor = {};
         currentBannerSync = 'both';
+        currentUserNames = [];
+        currentOrgKey = getOrgKeyFromLocation();
         scheduleApply();
       });
   }
@@ -325,8 +351,7 @@
     const cardTheme = cardKeys.map(key => currentCardThemes[key]).find(Boolean);
     if (cardTheme) return cardTheme;
 
-    const orgKey = getOrgKeyFromLocation();
-    const orgTheme = orgKey ? currentOrgThemes[orgKey]?.theme || currentOrgThemes[orgKey] : null;
+    const orgTheme = currentOrgKey ? currentOrgThemes[currentOrgKey]?.theme || currentOrgThemes[currentOrgKey] : null;
     return orgTheme || currentTheme;
   }
 
@@ -374,6 +399,10 @@
 
   function getGrantHeader() {
     if (!isGrantPage()) return null;
+    const currentUrl = location.pathname + location.search + location.hash;
+    if (cachedGrantHeaderUrl === currentUrl && cachedGrantHeader?.isConnected) {
+      return cachedGrantHeader;
+    }
 
     const manageControl = Array.from(document.querySelectorAll('a, button'))
       .find(el => normalizeText(el.textContent).includes('manage grant'));
@@ -388,25 +417,31 @@
         rect.height > 120 &&
         rect.height < 420
       ) {
+        cachedGrantHeader = el;
+        cachedGrantHeaderUrl = currentUrl;
         return el;
       }
     }
 
-    return Array.from(document.querySelectorAll('section, article, div'))
-      .filter(el => {
-        const text = el.textContent || '';
-        const rect = el.getBoundingClientRect();
-        return text.includes('Grant to') &&
-          text.includes('Manage grant') &&
-          rect.width > 280 &&
-          rect.height > 120 &&
-          rect.height < 420;
-      })
-      .sort((a, b) => {
-        const aRect = a.getBoundingClientRect();
-        const bRect = b.getBoundingClientRect();
-        return (aRect.width * aRect.height) - (bRect.width * bRect.height);
-      })[0] || null;
+    let bestHeader = null;
+    let bestArea = Infinity;
+    document.querySelectorAll('section, article, div').forEach(el => {
+      const text = el.textContent || '';
+      if (!text.includes('Grant to') || !text.includes('Manage grant')) return;
+
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 280 || rect.height <= 120 || rect.height >= 420) return;
+
+      const area = rect.width * rect.height;
+      if (area < bestArea) {
+        bestArea = area;
+        bestHeader = el;
+      }
+    });
+
+    cachedGrantHeader = bestHeader;
+    cachedGrantHeaderUrl = currentUrl;
+    return bestHeader;
   }
 
   function skinGrantHeader(card, theme) {
@@ -461,16 +496,7 @@
   }
 
   function getCurrentUserNames() {
-    const names = [
-      currentUser?.name,
-      currentUser?.full_name,
-      currentUser?.preferred_name,
-    ].map(normalizeText).filter(Boolean);
-
-    return Array.from(new Set([
-      ...names,
-      ...names.map(name => name.split(' ')[0]).filter(Boolean),
-    ]));
+    return currentUserNames;
   }
 
   function getCardOwnerName(card) {
@@ -715,21 +741,32 @@
 
     try {
       document.querySelectorAll(RESET_SELECTOR).forEach(card => {
-        if (isExcludedCard(card) || !isCurrentUserCard(card) || getCardTheme(card) === 'off') {
+        const excluded = isExcludedCard(card);
+        const currentUserCard = !excluded && isCurrentUserCard(card);
+        if (excluded || !currentUserCard || getCardTheme(card) === 'off') {
           resetCardTheme(card);
-          if (isExcludedCard(card) || !isCurrentUserCard(card)) {
+          if (excluded || !currentUserCard) {
             removeCardControls(card);
           }
         }
       });
 
+      let grantHeaderHandled = false;
+      const themeCard = shouldThemeCard();
+      const themeBanner = shouldThemeBanner();
+
       document.querySelectorAll(CARD_SELECTOR).forEach(card => {
         const theme = getCardTheme(card);
+        const excluded = isExcludedCard(card);
+        const currentUserCard = !excluded && isCurrentUserCard(card);
 
-        if (isExcludedCard(card) || !isCurrentUserCard(card) || theme === 'off') {
+        if (excluded || !currentUserCard || theme === 'off') {
           resetCardTheme(card);
-          if (isGrantPage()) resetGrantHeader();
-          if (isExcludedCard(card) || !isCurrentUserCard(card)) {
+          if (isGrantPage() && !grantHeaderHandled) {
+            resetGrantHeader();
+            grantHeaderHandled = true;
+          }
+          if (excluded || !currentUserCard) {
             removeCardControls(card);
           } else {
             addCardThemeButton(card);
@@ -737,13 +774,15 @@
           return;
         }
 
-        if (!shouldThemeCard()) {
+        if (!themeCard) {
           resetCardTheme(card);
           addCardThemeButton(card);
-          if (shouldThemeBanner()) {
+          if (themeBanner && !grantHeaderHandled) {
             skinGrantHeader(card, theme);
-          } else {
+            grantHeaderHandled = true;
+          } else if (!themeBanner && !grantHeaderHandled) {
             resetGrantHeader();
+            grantHeaderHandled = true;
           }
           return;
         }
@@ -761,10 +800,12 @@
         applyEditorTheme(card, theme);
         applyCustomImage(card, theme);
         addCardThemeButton(card);
-        if (shouldThemeBanner()) {
+        if (themeBanner && !grantHeaderHandled) {
           skinGrantHeader(card, theme);
-        } else {
+          grantHeaderHandled = true;
+        } else if (!themeBanner && !grantHeaderHandled) {
           resetGrantHeader();
+          grantHeaderHandled = true;
         }
       });
     } finally {
@@ -779,6 +820,8 @@
     lastObservedUrl = currentUrl;
     accountUserPromise = null;
     accountKeyPromise = null;
+    invalidateGrantHeaderCache();
+    currentOrgKey = getOrgKeyFromLocation();
     refreshAndApply();
   }
 
@@ -790,14 +833,35 @@
       handlePossibleNavigation();
 
       const hasCardChange = mutations.some(mutation => {
-        if (mutation.type === 'attributes') return true;
+        if (mutation.type === 'attributes') {
+          const target = mutation.target;
+          if (target.nodeType !== Node.ELEMENT_NODE) return false;
+          return target.matches?.(CARD_SELECTOR) ||
+            target.matches?.(RESET_SELECTOR) ||
+            target.closest?.('.stripe-card, .canceled-card-wrapper');
+        }
+
         return Array.from(mutation.addedNodes).some(node => {
           if (node.nodeType !== Node.ELEMENT_NODE) return false;
-          return node.matches?.(CARD_SELECTOR) || node.querySelector?.(CARD_SELECTOR);
+          if (
+            node.matches?.(CARD_SELECTOR) ||
+            node.matches?.(RESET_SELECTOR) ||
+            node.querySelector?.(CARD_SELECTOR) ||
+            node.querySelector?.(RESET_SELECTOR)
+          ) {
+            return true;
+          }
+
+          if (!isGrantPage()) return false;
+          const text = node.textContent || '';
+          return text.includes('Grant to') || text.includes('Manage grant');
         });
       });
 
-      if (hasCardChange) scheduleApply();
+      if (hasCardChange) {
+        if (isGrantPage()) invalidateGrantHeaderCache();
+        scheduleApply();
+      }
     }).observe(document.body, {
       childList: true,
       subtree: true,
