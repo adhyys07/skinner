@@ -1,17 +1,43 @@
 .card-skinner {
+    position: relative !important;
+    overflow: hidden !important;
+    background-image: none !important;
+    background-color: transparent !important;
+    box-shadow: 0 12px 28px rgba(72, 219, 251, 0.22) !important;
+}
+
+.card-skinner::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    border-radius: inherit !important;
     background: linear-gradient(120deg, #ff6b6b, #feca57, #48dbfb, #5f27cd) !important;
     background-size: 300% 300% !important;
     animation: skinnerAnimatedGradient 8s ease infinite !important;
-    box-shadow: 0 12px 28px rgba(72, 219, 251, 0.22) !important;
+    z-index: 1 !important;
+    pointer-events: none !important;
 }
 
 .card-skinner::before {
     content: "" !important;
     position: absolute !important;
     inset: 0 !important;
+    border: 1px solid rgba(255, 255, 255, 0.28) !important;
     border-radius: inherit !important;
-    background: rgba(0, 0, 0, 0.12) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+    z-index: 2 !important;
     pointer-events: none !important;
+}
+
+.card-skinner .stripe-card__number,
+.card-skinner .stripe-card__name,
+.card-skinner span,
+.card-skinner p {
+    position: relative !important;
+    z-index: 3 !important;
+    color: #ffffff !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45) !important;
+    font-weight: 700 !important;
 }
 
 @keyframes skinnerAnimatedGradient {

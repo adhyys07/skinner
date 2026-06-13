@@ -763,6 +763,35 @@ const initialize = async () => {
     setActiveScope(activeCardKey ? 'card' : 'global');
 };
 
+let sidebarRefreshTimer = null;
+
+const refreshSidebarContext = () => {
+    if (VIEW_MODE !== 'sidepanel') return;
+    clearTimeout(sidebarRefreshTimer);
+    sidebarRefreshTimer = setTimeout(() => {
+        accountKeyPromise = null;
+        initialize().catch(err => {
+            console.error(err);
+            updateStatus('Could not update tab context', 'error');
+        });
+    }, 120);
+};
+
+if (VIEW_MODE === 'sidepanel') {
+    chrome.tabs.onActivated?.addListener(refreshSidebarContext);
+    chrome.tabs.onUpdated?.addListener((tabId, changeInfo, tab) => {
+        if (!activeTab?.id || tabId !== activeTab.id) return;
+        if (changeInfo.url || changeInfo.status === 'complete') {
+            refreshSidebarContext();
+        }
+    });
+    chrome.windows.onFocusChanged?.addListener(windowId => {
+        if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+            refreshSidebarContext();
+        }
+    });
+}
+
 document.querySelectorAll('.scope-btn').forEach(btn => {
     btn.addEventListener('click', () => setActiveScope(btn.dataset.scope));
 });
