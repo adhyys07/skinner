@@ -1,8 +1,8 @@
 (() => {
   const CARD_SELECTOR = '.stripe-card.mt1:not(.deactivated):not(.canceled):not(.canceled-left):not(.canceled-right)';
   const RESET_SELECTOR = '.stripe-card.card-skinner, .stripe-card[data-skinner-theme], .stripe-card[data-skinner-original-style]';
-  const THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'custom'];
-  const CARD_MENU_THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft'];
+  const THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'animated-gradient', 'custom'];
+  const CARD_MENU_THEMES = ['glass', 'neon', 'retro', 'gradient', 'holo', 'minimal', 'minecraft', 'animated-gradient'];
   const DEFAULT_THEME = 'glass';
   const ORIGINAL_STYLE_ATTR = 'data-skinner-original-style';
   const CARD_ACTION_CLASS = 'skinner-card-action';
@@ -16,9 +16,19 @@
   const isOrgCardsPage = () => /^\/[^/]+\/cards\/?$/.test(location.pathname) && !isMyCardsPage();
   const isAnyCardsPage = () => isHomePage() || isMyCardsPage() || isOrgCardsPage() || isStripeCardPage() || isGrantPage();
 
+  function getOrgKeyFromLocation() {
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (!parts.length) return null;
+    if (['my', 'stripe_cards', 'grants'].includes(parts[0])) return null;
+    return parts[0];
+  }
+
   let currentTheme = DEFAULT_THEME;
   let currentCardThemes = {};
+  let currentOrgThemes = {};
   let currentCustomImages = {};
+  let currentEditor = {};
+  let currentBannerSync = 'both';
   let currentUser = null;
   let customImage = null;
   let accountUserPromise = null;
@@ -204,6 +214,29 @@
   content: "" !important;
   background: rgba(0, 0, 0, 0.18) !important;
   border-radius: inherit !important;
+}
+
+.card-skinner[data-skinner-theme="custom-editor"] {
+  background: var(--skinner-editor-bg, #5865f2) !important;
+  color: var(--skinner-editor-text, #ffffff) !important;
+  box-shadow: 0 0 var(--skinner-editor-glow, 12px) rgba(88, 101, 242, 0.45) !important;
+}
+
+.card-skinner[data-skinner-theme="custom-editor"] .stripe-card__number,
+.card-skinner[data-skinner-theme="custom-editor"] .stripe-card__name,
+.card-skinner[data-skinner-theme="custom-editor"] span,
+.card-skinner[data-skinner-theme="custom-editor"] p {
+  color: var(--skinner-editor-text, #ffffff) !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="custom-editor"] {
+  background: var(--skinner-editor-bg, #5865f2) !important;
+}
+
+.${GRANT_HEADER_CLASS}.card-skinner[data-skinner-theme="animated-gradient"] {
+  background: linear-gradient(120deg, #ff6b6b, #feca57, #48dbfb, #5f27cd) !important;
+  background-size: 300% 300% !important;
+  animation: skinnerAnimatedGradient 8s ease infinite !important;
 }`;
     });
 
@@ -222,8 +255,11 @@
       const accountKey = String(user?.id || user?.email || user?.name || 'unknown-account');
       const accountThemes = syncData?.accountThemes || {};
       const settings = accountThemes[accountKey] || {};
-      currentTheme = settings.theme || DEFAULT_THEME;
-      currentCardThemes = settings.cardThemes || {};
+      currentTheme = settings.theme || settings.global || DEFAULT_THEME;
+      currentCardThemes = settings.cardThemes || settings.cards || {};
+      currentOrgThemes = settings.orgThemes || settings.orgs || {};
+      currentEditor = settings.editor || {};
+      currentBannerSync = settings.bannerSync || 'both';
       currentCustomImages = localData?.customImages?.[accountKey] || {};
       customImage = currentCustomImages.global || null;
     }).finally(() => {
@@ -250,6 +286,9 @@
       .catch(() => {
         currentTheme = DEFAULT_THEME;
         currentCardThemes = {};
+        currentOrgThemes = {};
+        currentEditor = {};
+        currentBannerSync = 'both';
         scheduleApply();
       });
   }
@@ -284,7 +323,16 @@
   function getCardTheme(card) {
     const cardKeys = getCardKeys(card);
     const cardTheme = cardKeys.map(key => currentCardThemes[key]).find(Boolean);
-    return cardTheme || currentTheme;
+    if (cardTheme) return cardTheme;
+
+    const orgKey = getOrgKeyFromLocation();
+    const orgTheme = orgKey ? currentOrgThemes[orgKey]?.theme || currentOrgThemes[orgKey] : null;
+    return orgTheme || currentTheme;
+  }
+
+  function formatThemeLabel(theme) {
+    if (theme === 'animated-gradient') return 'Animated';
+    return theme.charAt(0).toUpperCase() + theme.slice(1);
   }
 
   function rememberOriginalStyle(card) {
@@ -460,6 +508,14 @@
   }
 
   function applyTextColor(card, theme) {
+    if (theme === 'custom-editor') {
+      const textColor = currentEditor.text || '#ffffff';
+      card.querySelectorAll('.stripe-card__number, .stripe-card__name, span, p').forEach(el => {
+        el.style.setProperty('color', textColor, 'important');
+      });
+      return;
+    }
+
     if (theme !== 'glass') return;
 
     const isDarkValue = document.documentElement.getAttribute('data-dark');
@@ -467,6 +523,26 @@
     card.querySelectorAll('.stripe-card__number, .stripe-card__name, span, p').forEach(el => {
       el.style.setProperty('color', textColor, 'important');
     });
+  }
+
+  function applyEditorTheme(card, theme) {
+    if (theme !== 'custom-editor') return;
+
+    const background = currentEditor.background || '#5865f2';
+    const glow = Number.isFinite(Number(currentEditor.glow)) ? Number(currentEditor.glow) : 12;
+    card.style.setProperty('--skinner-editor-bg', background);
+    card.style.setProperty('--skinner-editor-text', currentEditor.text || '#ffffff');
+    card.style.setProperty('--skinner-editor-glow', `${glow}px`);
+    card.style.setProperty('background-color', background, 'important');
+    card.style.setProperty('background-image', 'none', 'important');
+  }
+
+  function shouldThemeCard() {
+    return ['card', 'both'].includes(currentBannerSync || 'both') || !isGrantPage();
+  }
+
+  function shouldThemeBanner() {
+    return isGrantPage() && ['banner', 'both'].includes(currentBannerSync || 'both');
   }
 
   function applyCustomImage(card, theme) {
@@ -494,6 +570,7 @@
       gradient: { color: 'transparent', image: 'linear-gradient(135deg, #667eea, #764ba2, #f093fb)' },
       holo: { color: 'transparent', image: 'linear-gradient(135deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff)' },
       minimal: { color: '#1a1d23', image: 'none' },
+      'animated-gradient': { color: 'transparent', image: 'linear-gradient(120deg, #ff6b6b, #feca57, #48dbfb, #5f27cd)' },
       minecraft: {
         color: '#5d8a3c',
         image: 'repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(0,0,0,0.16) 31px, rgba(0,0,0,0.16) 32px), repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(0,0,0,0.16) 31px, rgba(0,0,0,0.16) 32px)',
@@ -510,6 +587,19 @@
       header.style.setProperty('background-position', 'center', 'important');
       header.style.setProperty('background-repeat', 'no-repeat', 'important');
       header.style.setProperty('background-blend-mode', 'normal', 'important');
+      return;
+    }
+
+    if (theme === 'custom-editor') {
+      const background = currentEditor.background || '#5865f2';
+      const glow = Number.isFinite(Number(currentEditor.glow)) ? Number(currentEditor.glow) : 12;
+      header.style.setProperty('--skinner-editor-bg', background);
+      header.style.setProperty('--skinner-editor-text', currentEditor.text || '#ffffff');
+      header.style.setProperty('--skinner-editor-glow', `${glow}px`);
+      header.style.setProperty('background-color', background, 'important');
+      header.style.setProperty('background-image', 'none', 'important');
+      header.style.setProperty('box-shadow', `0 0 ${glow}px ${background}`, 'important');
+      header.style.removeProperty('background-blend-mode');
       return;
     }
 
@@ -580,7 +670,7 @@
 
     const options = [
       ['global', 'Use global'],
-      ...CARD_MENU_THEMES.map(theme => [theme, theme.charAt(0).toUpperCase() + theme.slice(1)]),
+      ...CARD_MENU_THEMES.map(theme => [theme, formatThemeLabel(theme)]),
       ['off', 'Off'],
     ];
 
@@ -647,6 +737,17 @@
           return;
         }
 
+        if (!shouldThemeCard()) {
+          resetCardTheme(card);
+          addCardThemeButton(card);
+          if (shouldThemeBanner()) {
+            skinGrantHeader(card, theme);
+          } else {
+            resetGrantHeader();
+          }
+          return;
+        }
+
         rememberOriginalStyle(card);
         card.classList.add('card-skinner');
         card.dataset.skinnerTheme = theme;
@@ -657,9 +758,14 @@
 
         clearTextOverrides(card);
         applyTextColor(card, theme);
+        applyEditorTheme(card, theme);
         applyCustomImage(card, theme);
         addCardThemeButton(card);
-        skinGrantHeader(card, theme);
+        if (shouldThemeBanner()) {
+          skinGrantHeader(card, theme);
+        } else {
+          resetGrantHeader();
+        }
       });
     } finally {
       isSkinning = false;

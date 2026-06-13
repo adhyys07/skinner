@@ -1,0 +1,29 @@
+.card-skinner {
+    background: linear-gradient(120deg, #ff6b6b, #feca57, #48dbfb, #5f27cd) !important;
+    background-size: 300% 300% !important;
+    animation: skinnerAnimatedGradient 8s ease infinite !important;
+    box-shadow: 0 12px 28px rgba(72, 219, 251, 0.22) !important;
+}
+
+.card-skinner::before {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    border-radius: inherit !important;
+    background: rgba(0, 0, 0, 0.12) !important;
+    pointer-events: none !important;
+}
+
+@keyframes skinnerAnimatedGradient {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}

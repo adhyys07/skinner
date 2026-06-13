@@ -8,7 +8,7 @@ images, and back up or restore your Skinner settings.
 
 ## Features
 
-- 7 built-in themes:
+- 8 built-in themes:
   - `Glass`: frosted glass effect
   - `Neon`: green-to-purple gradient
   - `Retro`: CRT-inspired red/blue theme
@@ -16,9 +16,14 @@ images, and back up or restore your Skinner settings.
   - `Holo`: rainbow holographic shimmer
   - `Minimal`: clean dark card
   - `Minecraft`: pixelated grass-block grid
+  - `Animated`: moving multicolor gradient
 - Global default theme from the extension popup.
 - Per-card themes using the in-card `Skin` button.
 - Per-card themes from the popup when viewing a specific card or grant page.
+- Per-organization themes from supported organization pages.
+- Theme presets, theme-code sharing, and random theme controls.
+- Custom editor controls for background, text color, and glow.
+- Grant banner sync modes for card-only, banner-only, both, or off.
 - Custom card images from file upload, with built-in browser resizing/upscaling.
 - Custom card images from direct image URLs.
 - Per-account settings, so different HCB accounts in the same browser profile do not share themes.
@@ -104,9 +109,9 @@ The backup includes:
   - Applies per-card and global custom images.
   - Watches HCB navigation and Turbo updates.
 - `popup/popup.html`
-  - Theme grid, scope selector, image upload, URL image input, export/import controls.
+  - Theme grid, scope selector, image upload, URL image input, preset/editor/reset controls, export/import controls.
 - `popup/popup.js`
-  - Handles theme selection, per-card overrides, image storage, export/import, and active tab refresh.
+  - Handles theme selection, per-card and per-org overrides, presets, random themes, editor settings, image storage, export/import, and active tab refresh.
 - `popup/popup.css`
   - Styles the popup UI.
 

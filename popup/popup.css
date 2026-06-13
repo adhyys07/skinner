@@ -171,6 +171,19 @@ body {
 }
 .preview-minecraft .preview-dots { color: #fff; text-shadow: 2px 2px 0 #3b5929; }
 
+/* Animated */
+.preview-animated-gradient {
+    background: linear-gradient(120deg, #ff6b6b, #feca57, #48dbfb, #5f27cd);
+    background-size: 300% 300%;
+    animation: previewAnimatedGradient 6s ease infinite;
+}
+@keyframes previewAnimatedGradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+.preview-animated-gradient .preview-dots { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.45); }
+
 /* ---- Theme Label ---- */
 .theme-label {
     display: block;
@@ -325,4 +338,63 @@ body {
     cursor: pointer;
     font-size: 12px;
     font-weight: 700;
+}
+
+.advanced-tools {
+    display: grid;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.advanced-tools input,
+.advanced-tools select,
+.advanced-tools button {
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    font-size: 12px;
+}
+
+.advanced-tools input,
+.advanced-tools select {
+    width: 100%;
+    padding: 8px 10px;
+    outline: none;
+}
+
+.advanced-tools input:focus,
+.advanced-tools select:focus {
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+.advanced-tools button {
+    min-height: 34px;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.advanced-tools button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.advanced-tools label {
+    display: grid;
+    gap: 5px;
+    color: #9ca3af;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.advanced-tools input[type="color"] {
+    height: 34px;
+    padding: 4px;
+}
+
+.advanced-tools input[type="range"] {
+    padding: 0;
 }

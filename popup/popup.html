@@ -59,6 +59,12 @@
             </div>
             <span class="theme-label">Minecraft</span>
         </button>
+        <button class="theme-card" data-theme="animated-gradient">
+            <div class="preview preview-animated-gradient">
+                <span class="preview-dots">.... .... 4788</span>
+            </div>
+            <span class="theme-label">Animated</span>
+        </button>
     </div>
 
     <div class="actions">
@@ -77,6 +83,49 @@
             Import Themes
             <input type="file" id="importThemeFile" accept="application/json,.json" />
         </label>
+        <div class="advanced-tools">
+            <input id="presetNameInput" type="text" placeholder="Preset Name" />
+            <button id="savePresetBtn" type="button">Save Preset</button>
+            <select id="presetSelect"></select>
+            <button id="applyPresetBtn" type="button">Apply Preset</button>
+
+            <button id="randomThemeBtn" type="button">Random Theme</button>
+            <button id="randomDailyBtn" type="button">Random Daily</button>
+
+            <button id="saveOrgThemeBtn" type="button">Use Theme for this Org</button>
+
+            <label>
+                Banner Sync
+                <select id="bannerSyncSelect">
+                    <option value="both">Card + Banner</option>
+                    <option value="card">Card Only</option>
+                    <option value="banner">Banner only</option>
+                    <option value="off">Off</option>
+                </select>
+            </label>
+            <label>
+                Background
+                <input id="editorBgInput" type="color" value="#5865f2" />
+            </label>
+            <label>
+                Text
+                <input id="editorTextInput" type="color" value="#ffffff" />
+            </label>
+            <label>
+                Glow
+                <input id="editorGlowInput" type="range" min="0" max="40" value="12" />
+            </label>
+
+            <button id="saveEditorThemeBtn" type="button">Save Custom Theme</button>
+            <button id="copyThemeCodeBtn" type="button">Copy Theme Code</button>
+            <input id="themeCodeInput" type="text" placeholder="Paste theme code" />
+            <button id="importThemeCodeBtn" type="button">Import Theme Code</button>
+
+            <button id="resetCardBtn" type="button">Reset Card</button>
+            <button id="resetOrgBtn" type="button">Reset Org</button>
+            <button id="resetImagesBtn" type="button">Reset Images</button>
+            <button id="resetEverythingBtn" type="button">Reset Everything</button>
+        </div>
     </div>
 
     <div class="status-bar">
