@@ -22,12 +22,17 @@ images, and back up or restore your Skinner settings.
 - Per-card themes using the in-card `Skin` button.
 - Per-card themes from the popup when viewing a specific card or grant page.
 - Per-organization themes from supported organization pages.
-- Theme presets, theme-code sharing, and random theme controls.
-- Custom editor controls for background, text color, and glow.
+- Theme presets with save and apply controls.
+- Theme-code sharing: copy a theme code to share or paste one to import.
+- Random Theme: pick a random built-in theme instantly.
+- Random Daily: picks a different random theme each day, consistent within the day.
+- Custom editor controls for background color, text color, and glow intensity.
 - Grant banner sync modes for card-only, banner-only, both, or off.
 - Custom card images from file upload, with built-in browser resizing/upscaling.
 - Custom card images from direct image URLs.
+- Turn Off Overlays to disable all Skinner theming and custom images globally.
 - Per-account settings, so different HCB accounts in the same browser profile do not share themes.
+- Automatic local backup of settings on each save (up to 5 snapshots per account).
 - Export/import for saved themes and custom images.
 - Grant card pages can theme the grant header to match the selected card theme.
 - Canceled/deactivated cards are skipped so Skinner does not apply themes to them.
@@ -88,6 +93,12 @@ Use either method:
 
 Use `Use Global Theme` to remove a card-specific override.
 
+### Per-Organization Theme
+
+On an organization's card page, open the advanced tools section in the popup and click
+`Use Theme for this Org` to apply the current theme to all cards for that organization.
+Use `Reset Org` to clear the organization override.
+
 ### Custom Images
 
 - Use `Upload Custom Image` to choose an image file.
@@ -96,6 +107,23 @@ Use `Use Global Theme` to remove a card-specific override.
 If `This card` is selected, the image applies only to that card. If `Global` is
 selected, the image becomes the global custom-image theme.
 
+### Turn Off Overlays
+
+Click `Turn Off Overlays` to disable all Skinner themes and custom images. Cards
+will revert to the default HCB design. Select any theme to re-enable Skinner.
+
+### Advanced Controls
+
+Open the advanced tools section for additional controls:
+
+- **Presets**: Save the current theme and editor settings as a named preset, then apply it later.
+- **Random Theme**: Immediately apply a random built-in theme.
+- **Random Daily**: Apply a random built-in theme that stays the same for the whole day and changes the next day.
+- **Banner Sync**: Choose whether Skinner themes the card, the grant banner, both, or neither.
+- **Custom Theme Editor**: Set a custom background color, text color, and glow level, then click `Save Custom Theme`.
+- **Theme Codes**: Click `Copy Theme Code` to get a shareable code for the current theme settings. Paste a code into the input and click `Import Theme Code` to apply someone else's theme.
+- **Reset Controls**: `Reset Card` clears the override for the active card. `Reset Org` clears the organization override. `Reset Images` removes all custom images. `Reset Everything` removes all saved Skinner data.
+
 ### Export And Import
 
 - `Export Themes` downloads a JSON backup of saved themes and custom images.
@@ -103,8 +131,12 @@ selected, the image becomes the global custom-image theme.
 
 The backup includes:
 
-- `chrome.storage.sync.accountThemes`
-- `chrome.storage.local.customImages`
+- `chrome.storage.sync.accountThemes` — all per-account theme, preset, editor, and org settings
+- `chrome.storage.local.customImages` — all uploaded custom card images
+
+Skinner also automatically saves up to 5 local snapshots of your settings each time
+you make a change. These are stored in `chrome.storage.local.accountBackups` and are
+separate from the manual export.
 
 ## How It Works
 
@@ -115,10 +147,14 @@ The backup includes:
   - Adds the per-card `Skin` menu.
   - Applies per-card and global custom images.
   - Watches HCB navigation and Turbo updates.
+- `content/applyTheme.js`
+  - Utility used by the injector to swap the active theme stylesheet link.
 - `popup/popup.html`
   - Theme grid, scope selector, image upload, URL image input, sidebar controls, preset/editor/reset controls, export/import controls.
 - `popup/popup.js`
   - Handles theme selection, per-card and per-org overrides, presets, random themes, editor settings, image storage, export/import, and active tab refresh.
+- `popup/sidepanel.html`
+  - Hosts the popup UI inside an iframe when opened as a Chrome side panel.
 - `popup/popup.css`
   - Styles the popup UI.
 
